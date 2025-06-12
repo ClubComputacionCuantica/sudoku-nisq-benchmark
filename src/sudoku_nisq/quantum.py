@@ -270,7 +270,6 @@ class ExactCoverQuantumSolver:
             self.get_circuit()
         flatten = FlattenRegisters()
         flatten.apply(self.main_circuit)
-        print("Flattened once")
     
     def set_ibm_backend(self,ibm_backend="ibm_brisbane"):
         self.backend = IBMQBackend(ibm_backend)

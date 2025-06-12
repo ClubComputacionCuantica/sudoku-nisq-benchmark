@@ -19,7 +19,7 @@
 ** AI generated draft
 * Also mention that it offers an accessible view to real quantum computing applied to a familiar problem
 
-This repository contains a research-oriented framework designed by our Quantum Computing Club to demonstrate how **Sudoku puzzles can serve as accessible benchmarking problems for near-term quantum devices** (NISQ era). It integrates **puzzle generation**, **quantum circuit construction using multiple algorithms**, **resource analysis**, and **hardware transpilation**.
+This repository contains a designed to demonstrate how **Sudoku puzzles can serve as accessible benchmarking problems for near-term quantum devices** (NISQ era). It integrates **puzzle generation**, **quantum circuit construction using multiple algorithms**, **resource analysis**, and **hardware transpilation**.
 
 Our framework offers a transparent, pedagogically meaningful, and technically rigorous approach to understanding the limitations and variability of quantum processors when applied to small but non-trivial constraint satisfaction problems (CSPs).
 
@@ -123,7 +123,6 @@ Metrics collected include:
 
 ## Future Work
 
-- Implement Sudoku solvers using variational encodings
 - Benchmark across multiple QPUs
 - Explore quantum counting to estimate number of solutions
 - Include error mitigation techniques (zero-noise extrapolation, purification)

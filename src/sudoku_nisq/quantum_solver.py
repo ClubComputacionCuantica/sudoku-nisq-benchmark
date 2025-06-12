@@ -18,11 +18,19 @@ class QuantumSolver(ABC):
         self.current_backend = None
 
     @abstractmethod
+    def find_resources(self):
+        """Determine resources needed for the problem."""
+        pass
+
+    @abstractmethod
     def get_circuit(self):
         """Construct and return a pytket Circuit for the problem."""
         pass
+    
+    def draw_circuit(self):
+        draw(self.main_circuit)
 
-    def _prepare_circuit(self):
+    def flatten_registers(self):
         """Flatten registers and prepare the main circuit."""
         if self.main_circuit is None:
             self.main_circuit = self.get_circuit()
@@ -48,11 +56,7 @@ class QuantumSolver(ABC):
         return devices
 
     def init_quantinuum(self, token: str, name: str = "quantinuum"):
-        """Authenticate Quantinuum and register its backend (stub)."""
-        if QuantinuumBackend is None:
-            raise RuntimeError("Quantinuum extension not installed")
-        quant = QuantinuumBackend(token)
-        self.add_backend(name, quant)
+        pass
 
     def aer_simulation(self, shots=1024, aer_name: str = "aer"):
         """Register and run simulation on Aer backend."""
@@ -63,11 +67,11 @@ class QuantumSolver(ABC):
         return self.run(shots=shots)
 
     def run(self, shots=1024):
-        """Execute the circuit on the current backend (Aer/IBMQ/Quantinuum)."""
+        """Execute the circuit on the current backend"""
         if self.current_backend is None:
             raise RuntimeError("No backend selected. Call set_backend() first.")
         backend = self.backends[self.current_backend]
-        circ = self._prepare_circuit()
+        circ = self.flatten_registers()
         # Distinguish backends by type
         if backend.__class__.__name__ == 'AerBackend':
             compiled = backend.get_compiled_circuit(circ)
