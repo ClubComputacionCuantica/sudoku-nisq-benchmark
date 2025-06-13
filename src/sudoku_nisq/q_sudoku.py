@@ -2,9 +2,14 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from sudoku import Sudoku as pysudoku
 from sudoku_py import SudokuGenerator as sudokupy
-from sudoku_nisq.quantum import ExactCoverQuantumSolver
+from sudoku_nisq.exact_cover_solver import ExactCoverQuantumSolver
+from sudoku_nisq.graph_coloring_solver import GraphColoringQuantumSolver
+from sudoku_nisq.backtracking_solver import BacktrackingQuantumSolver
 
 class Sudoku():
+    """
+    Note that the actual Sudoku matrix is stored as the attribute self.puzzle.board
+    """
     def __init__(self, board=[], grid_size=2, sudopy=True, num_missing_cells=6, pysudo=False, difficulty=0.4, seed=100, file_path='data/my_puzzle.csv'):
         self.grid_size = grid_size
         self.board_size = self.grid_size*self.grid_size
@@ -33,7 +38,6 @@ class Sudoku():
 
         self.open_tuples = self.find_open_tuples()
         self.pre_tuples = self.find_preset_tuples()
-        # self.init_quantum()
     
     def custom_board(self,board):
         self.puzzle.board = board
@@ -85,8 +89,17 @@ class Sudoku():
 
         return fig
     
-    def init_quantum(self,simple=True,pattern=False):
-        self.quantum = ExactCoverQuantumSolver(self,simple=simple,pattern=pattern)
+    def init_exactcover(self, simple: bool = True, pattern: bool = False):
+        """Initialize with ExactCoverQuantumSolver."""
+        self.quantum = ExactCoverQuantumSolver(sudoku=self, simple=simple, pattern=pattern)
+
+    def init_graphcoloring(self):
+        """Initialize with GraphColoringQuantumSolver."""
+        self.quantum = GraphColoringQuantumSolver()
+
+    def init_backtracking(self):
+        """Initialize with BacktrackingQuantumSolver."""
+        self.quantum = BacktrackingQuantumSolver()
     
     def find_preset_tuples(self):
         preset_tuples = []
