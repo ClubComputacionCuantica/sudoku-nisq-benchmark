@@ -6,13 +6,10 @@ class GraphColoringQuantumSolver(QuantumSolver):
     Solver for graph-coloring using a quantum algorithm.
     """
 
-    def __init__(self, graph=None, num_colors: int = 2):
+    def __init__(self):
         super().__init__()
-        self.graph = graph
-        self.num_colors = num_colors
 
     def get_circuit(self) -> Circuit:
         circuit = Circuit()
-        # TODO: allocate qubits and encode coloring constraints
+        
         return circuit
-    
