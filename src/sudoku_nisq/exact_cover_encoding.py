@@ -1,11 +1,11 @@
 from collections import defaultdict
-from sudoku_nisq.pattern_generation import PatternGeneration
+from sudoku_nisq.exact_pattern_generation import PatternGeneration
 
 # The `ExactCoverEncoding` class generates constraints for an exact cover problem based on open tuples for any given sudoku puzzle
 
 class ExactCoverEncoding:
     def __init__(self, sudoku):
-        self.size = sudoku.grid_size
+        self.size = sudoku.subgrid_size
         self.open_tuples = sudoku.open_tuples
         self.set_tuples = sudoku.pre_tuples
         

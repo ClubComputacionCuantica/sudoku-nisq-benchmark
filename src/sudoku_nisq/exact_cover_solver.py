@@ -8,10 +8,34 @@ from sudoku_nisq.quantum_solver import QuantumSolver
 
 class ExactCoverQuantumSolver(QuantumSolver):
     """
-    Solve Exact Cover via a Grover-based encoding.
-    """
-    def __init__(self, sudoku=None, num_solutions=None, simple=True, pattern=False,
-                 universe=None, subsets=None):
+    This module defines the ExactCoverQuantumSolver class, which constructs and simulates or
+    runs a quantum circuit through a backend to solve any Exact Cover problem using 
+    using an algorithm based on Grover's algorithm: 
+        J. -R. Jiang and Y. -J. Wang, "Quantum Circuit Based on Grover’s Algorithm to Solve Exact Cover Problem," 2023
+        VTS Asia Pacific Wireless Communications Symposium (APWCS), Tainan city, Taiwan, 2023, pp. 1-5, doi: 10.1109/APWCS60142.2023.10234054.
+
+    Usage:
+    - Initialize the solver with the problem instance.
+    - Build the circuit using get_circuit().
+    - Simulate the circuit using aer_simulation().
+    - Analyze and plot the results using counts_plot().
+
+    Example:
+    # Define your problem instance
+            sudoku = Sudoku()   This also allows to select a simple encoding or an encoding in patterns
+        or general exact cover form
+            U = [A, B, C]
+            S = {'S_0': [U[2]], 'S_1': [U[0], U[2]], 'S_2': [U[0]], 'S_3': [U[1]], 'S_4': [U[0], U[1]]}
+    
+    # Initialize the solver
+    solver = ExactCoverQuantumSolver(sudoku, simple=True)
+
+    # Build the quantum circuit
+    circuit = solver.get_circuit()
+    
+    """  
+    def __init__(self, sudoku=None, simple=True, pattern=False,
+                 num_solutions=None, universe=None, subsets=None):
         """
         Initialize the ExactCoverQuantumSolver instance.
 
@@ -19,9 +43,10 @@ class ExactCoverQuantumSolver(QuantumSolver):
         - sudoku: The Sudoku puzzle to solve.
         - simple (bool): Whether to use simple encoding.
         - pattern (bool): Whether to use pattern encoding.
-        - num_solutions (int): The number of expected solutions.
         """
+        
         # Initialize the base class
+        
         super().__init__()
         
         if sudoku is not None:
@@ -37,14 +62,13 @@ class ExactCoverQuantumSolver(QuantumSolver):
                 subsets = encoding.pattern_subsets
             
             self.subsets = subsets
+            
+            if num_solutions is None:
+                self.num_solutions = sudoku.count_solutions()
 
         if sudoku is None:
             self.universe = universe
             self.subsets = subsets
-        
-        if num_solutions is None:
-            self.num_solutions = sudoku.count_solutions()
-        else:
             self.num_solutions = num_solutions
             
         self.u_size = len(self.universe)        # Total elements to cover
@@ -98,7 +122,13 @@ class ExactCoverQuantumSolver(QuantumSolver):
         total_gates = (superpos_gates + prepare_anc_gates +
                     MCX_gates + num_iterations * diffuser_gates)
 
-        return num_qubits, MCX_gates, total_gates
+        return {
+            "n_qubits": num_qubits,
+            "MCX_gates": MCX_gates,
+            "n_gates": total_gates,
+            "depth": None,          # depth not available here
+            "error": None           # this should be set if exception occurs instead
+        }
 
     def get_circuit(self):
         """

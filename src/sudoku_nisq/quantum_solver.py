@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
-from pytket import Circuit, Qubit, OpType
 from pytket.passes import FlattenRegisters
 from pytket.circuit.display import render_circuit_jupyter as draw
 from pytket.extensions.qiskit import IBMQBackend, AerBackend
@@ -51,16 +50,6 @@ class QuantumSolver(ABC):
         self.backend_handles = {}  # backend_name -> handle
 
     @abstractmethod
-    def find_resources(self):
-        """
-        Determine quantum resources needed for the problem.
-        
-        This method should be implemented by subclasses to analyze the problem
-        and determine required qubits, gates, and other quantum resources.
-        """
-        pass
-
-    @abstractmethod
     def get_circuit(self):
         """
         Construct and return a pytket Circuit for the problem.
@@ -70,6 +59,16 @@ class QuantumSolver(ABC):
 
         Returns:
             Circuit: A pytket quantum circuit object.
+        """
+        pass
+    
+    @abstractmethod
+    def find_resources(self):
+        """
+        Determine quantum resources needed for the problem.
+        
+        This method should be implemented by subclasses to analyze the problem
+        and determine required qubits, gates, and other quantum resources.
         """
         pass
     

@@ -60,7 +60,7 @@ Refer to the example Jupyter notebooks for generating puzzles, constructing quan
 ```python
 from sudoku_nisq.q_sudoku import Sudoku
 
-sudoku = Sudoku(grid_size=2, missing_cells=5)
+sudoku = Sudoku(subgrid_size=2, missing_cells=5)
 sudoku.plot()
 sudoku.quantum.get_circuit()
 sudoku.quantum.find_resources()

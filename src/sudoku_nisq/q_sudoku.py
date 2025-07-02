@@ -10,13 +10,12 @@ class Sudoku():
     """
     Note that the actual Sudoku matrix is stored as the attribute self.puzzle.board
     """
-    def __init__(self, board=[], grid_size=2, sudopy=True, num_missing_cells=6, pysudo=False, difficulty=0.4, seed=100, file_path='data/my_puzzle.csv'):
-        self.grid_size = grid_size
-        self.board_size = self.grid_size*self.grid_size
+    def __init__(self, board=[], subgrid_size=2, sudopy=True, num_missing_cells=6, pysudo=False, difficulty=0.4, seed=100):
+        self.subgrid_size = subgrid_size
+        self.board_size = self.subgrid_size*self.subgrid_size
         self.total_cells = self.board_size * self.board_size
         self.difficulty = difficulty
         self.num_missing_cells = num_missing_cells
-        self.file_path = file_path
         
         # Optionally use 
         #   custom board as a matrix
@@ -24,23 +23,18 @@ class Sudoku():
         #   sudoku-py: allows to generate puzzles by number of blank cells.
         
         if board:
-            self.puzzle = pysudoku(self.grid_size,self.grid_size,board=board)
+            self.puzzle = pysudoku(self.subgrid_size,self.subgrid_size,board=board)
         elif pysudo is True:
-            self.puzzle = pysudoku(self.grid_size,seed=seed).difficulty(self.difficulty)
-            # print(self.puzzle.board)
+            self.puzzle = pysudoku(self.subgrid_size,seed=seed).difficulty(self.difficulty)
         elif sudopy is True:
             puzzle = sudokupy(board_size=self.board_size)
             cells_to_remove = self.num_missing_cells
             puzzle.generate(cells_to_remove=cells_to_remove)
             puzzle.board_exchange_values({'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5, 'f': 6, 'g': 7, 'h': 8, 'i': 9})
             self.puzzle = puzzle
-            # print(self.puzzle.board)
 
         self.open_tuples = self.find_open_tuples()
         self.pre_tuples = self.find_preset_tuples()
-    
-    def custom_board(self,board):
-        self.puzzle.board = board
     
     def plot(self,title=None):
         """# Create an instance of the SudokuPuzzle class
@@ -91,20 +85,20 @@ class Sudoku():
     
     def init_exactcover(self, simple: bool = True, pattern: bool = False):
         """Initialize with ExactCoverQuantumSolver."""
-        self.quantum = ExactCoverQuantumSolver(sudoku=self, simple=simple, pattern=pattern)
+        self.exact = ExactCoverQuantumSolver(sudoku=self, simple=simple, pattern=pattern)
 
     def init_graphcoloring(self):
         """Initialize with GraphColoringQuantumSolver."""
-        self.quantum = GraphColoringQuantumSolver()
-
+        self.coloring = GraphColoringQuantumSolver(sudoku=self)
+    
     def init_backtracking(self):
         """Initialize with BacktrackingQuantumSolver."""
-        self.quantum = BacktrackingQuantumSolver()
-    
+        self.backtracking = BacktrackingQuantumSolver(sudoku=self)
+
     def find_preset_tuples(self):
         preset_tuples = []
-        for i in range(self.grid_size*self.grid_size):  # Loop over each row
-            for j in range(self.grid_size*self.grid_size):  # Loop over each column in the row
+        for i in range(self.subgrid_size*self.subgrid_size):  # Loop over each row
+            for j in range(self.subgrid_size*self.subgrid_size):  # Loop over each column in the row
                 element = self.puzzle.board[i][j]
                 if element is not None: # Check if the cell is pre-filled
                     preset_tuples.append((i,j,element)) # Store pre-filled cell as tuple
@@ -113,24 +107,24 @@ class Sudoku():
     ## Find open cells and store them in tuples
     def find_open_tuples(self):
         open_tuples = []
-        for i in range(self.grid_size*self.grid_size):  # Loop over each row
-            for j in range(self.grid_size*self.grid_size):  # Loop over each column in the row
+        for i in range(self.subgrid_size*self.subgrid_size):  # Loop over each row
+            for j in range(self.subgrid_size*self.subgrid_size):  # Loop over each column in the row
                 element = self.puzzle.board[i][j]
                 if element is None or element == 0: # Check if the cell is empty
-                    digits = list(range(1, self.grid_size*self.grid_size +1)) # Possible digits for the cell
+                    digits = list(range(1, self.subgrid_size*self.subgrid_size +1)) # Possible digits for the cell
                     # Discard digits based on the column constraint
-                    for p in range(self.grid_size*self.grid_size):
+                    for p in range(self.subgrid_size*self.subgrid_size):
                         if self.puzzle.board[p][j] is not None and self.puzzle.board[p][j] != 0 and self.puzzle.board[p][j] in digits:
                             digits.remove(self.puzzle.board[p][j])
                     # Discard digits based on the row constraint
-                    for q in range(self.grid_size*self.grid_size):
+                    for q in range(self.subgrid_size*self.subgrid_size):
                         if self.puzzle.board[i][q] is not None and self.puzzle.board[i][q] != 0 and self.puzzle.board[i][q] in digits:
                             digits.remove(self.puzzle.board[i][q])
                     # Discard digits based on the subfield
-                    subgrid_row_start = self.grid_size * (i // self.grid_size)
-                    subgrid_col_start = self.grid_size * (j // self.grid_size)
-                    for x in range(subgrid_row_start, subgrid_row_start + self.grid_size):
-                        for y in range(subgrid_col_start, subgrid_col_start + self.grid_size):
+                    subgrid_row_start = self.subgrid_size * (i // self.subgrid_size)
+                    subgrid_col_start = self.subgrid_size * (j // self.subgrid_size)
+                    for x in range(subgrid_row_start, subgrid_row_start + self.subgrid_size):
+                        for y in range(subgrid_col_start, subgrid_col_start + self.subgrid_size):
                             if self.puzzle.board[x][y] is not None and self.puzzle.board[x][y] != 0 and self.puzzle.board[x][y] in digits:
                                 digits.remove(self.puzzle.board[x][y])
 
@@ -166,11 +160,11 @@ class Sudoku():
                         return False
                     seen.add(num)
         # Check subgrids (blocks) for duplicates
-        for block_row in range(0, size, self.grid_size):
-            for block_col in range(0, size, self.grid_size):
+        for block_row in range(0, size, self.subgrid_size):
+            for block_col in range(0, size, self.subgrid_size):
                 seen = set()
-                for i in range(block_row, block_row + self.grid_size):
-                    for j in range(block_col, block_col + self.grid_size):
+                for i in range(block_row, block_row + self.subgrid_size):
+                    for j in range(block_col, block_col + self.subgrid_size):
                         num = board[i][j]
                         if num != 0:
                             if num in seen:
@@ -202,4 +196,3 @@ class Sudoku():
                 count += self.count_solutions()
             self.set_cell(i, j, 0)  # Backtrack
         return count
-    

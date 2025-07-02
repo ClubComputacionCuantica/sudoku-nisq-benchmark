@@ -81,9 +81,9 @@ class GenData:
         data_list: List that stores computed quantum resource data for each puzzle.
         engine: SQLAlchemy engine for database operations (if db_url is provided).
     """
-    def __init__(self, grid_size: int = 2, num_puzzles: int = 50, db_url: Optional[str] = None):
-        self.size = grid_size
-        self.board_size = grid_size * grid_size
+    def __init__(self, subgrid_size: int = 2, num_puzzles: int = 50, db_url: Optional[str] = None):
+        self.size = subgrid_size
+        self.board_size = subgrid_size * subgrid_size
         self.num_puzzles = num_puzzles
         self.db_url = db_url
         self.total_cells = self.board_size * self.board_size
@@ -178,12 +178,12 @@ class GenData:
             # Loop over a range of missing cells if num_empty_cells is not specified
             for i in range(num_cells_range[0], num_cells_range[1] + 1):
                 for _ in tqdm(range(self.num_puzzles), desc=f"Generating puzzles with {i} missing cells"):
-                    sudoku = Sudoku(grid_size=self.size, num_missing_cells=i)
+                    sudoku = Sudoku(subgrid_size=self.size, num_missing_cells=i)
                     self._append_quantum_resources(sudoku)
         else:
             # Generate data for a specific number of missing cells
             for _ in tqdm(range(self.num_puzzles), desc=f"Generating puzzles with {num_empty_cells} missing cells"):
-                sudoku = Sudoku(grid_size=self.size, num_missing_cells=num_empty_cells)
+                sudoku = Sudoku(subgrid_size=self.size, num_missing_cells=num_empty_cells)
                 self._append_quantum_resources(sudoku)
 
         return pd.DataFrame(self.data_list)
@@ -472,6 +472,6 @@ class QuantumDataAnalysis:
             logger.info(f"T-test for {column} vs {pattern_column}: t-statistic = {t_stat:.4f}, p-value = {p_value:.4f}")
 
 # Example use of QuantumDataAnalysis class
-# gen_data = GenData(grid_size=2, num_puzzles=10)
+# gen_data = GenData(subgrid_size=2, num_puzzles=10)
 # data_df = gen_data.generate_data(num_empty_cells=5)
 # analysis = QuantumDataAnalysis(df=data_df)

@@ -13,7 +13,8 @@ dependencies = [
     "pytket-qiskit (>=0.68.0,<0.69.0)",
     "matplotlib (>=3.10.3,<4.0.0)",
     "py-sudoku (>=2.0.0,<3.0.0)",
-    "sudoku-py (>=1.0.0,<2.0.0)"
+    "sudoku-py (>=1.0.0,<2.0.0)",
+    "pandas (>=2.3.0,<3.0.0)"
 ]
 
 [tool.poetry]
