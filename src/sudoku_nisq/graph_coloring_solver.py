@@ -6,10 +6,10 @@ class GraphColoringQuantumSolver(QuantumSolver):
     Solve Sudoku using graph coloring Grover-based algorithm encoded in a quantum circuit.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self,sudoku=None):
+        super().__init__(sudoku=sudoku)
 
-    def get_circuit(self) -> Circuit:
+    def build_circuit(self) -> Circuit:
         circuit = Circuit()
         return circuit
     

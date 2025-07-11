@@ -24,6 +24,9 @@ Thumbs.db
 *.log
 *.tmp
 
+# Quantum solver cache
+.quantum_solver_cache/
+
 # Distribution/packaging
 build/
 dist/

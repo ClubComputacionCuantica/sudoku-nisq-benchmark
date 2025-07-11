@@ -16,7 +16,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
 
     Usage:
     - Initialize the solver with the problem instance.
-    - Build the circuit using get_circuit().
+    - Build the circuit using build_circuit().
     - Simulate the circuit using aer_simulation().
     - Analyze and plot the results using counts_plot().
 
@@ -31,7 +31,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
     solver = ExactCoverQuantumSolver(sudoku, simple=True)
 
     # Build the quantum circuit
-    circuit = solver.get_circuit()
+    circuit = solver.build_circuit()
     
     """  
     def __init__(self, sudoku=None, simple=True, pattern=False,
@@ -45,9 +45,8 @@ class ExactCoverQuantumSolver(QuantumSolver):
         - pattern (bool): Whether to use pattern encoding.
         """
         
-        # Initialize the base class
-        
-        super().__init__()
+        # Initialize the base class with sudoku parameter
+        super().__init__(sudoku=sudoku)
         
         if sudoku is not None:
             
@@ -118,7 +117,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
             "error": None           # this should be set if exception occurs instead
         }
 
-    def get_circuit(self):
+    def build_circuit(self):
         """
         Builds and returns the full quantum circuit for the Exact Cover problem.
 

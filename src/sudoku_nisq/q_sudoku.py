@@ -1,4 +1,3 @@
-from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from sudoku import Sudoku as pysudoku
 from sudoku_py import SudokuGenerator as sudokupy
