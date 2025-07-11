@@ -63,7 +63,7 @@ from sudoku_nisq.q_sudoku import Sudoku
 sudoku = Sudoku(subgrid_size=2, missing_cells=5)
 sudoku.plot()
 sudoku.quantum.get_circuit()
-sudoku.quantum.find_resources()
+sudoku.quantum.resource_estimation()
 ```
 
 For benchmarking on IBM backends:

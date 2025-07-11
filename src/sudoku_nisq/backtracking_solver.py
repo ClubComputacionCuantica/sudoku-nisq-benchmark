@@ -13,7 +13,7 @@ class BacktrackingQuantumSolver(QuantumSolver):
         circuit = Circuit()
         return circuit
     
-    def find_resources(self) -> Dict[str, Any]:
+    def resource_estimation(self):
         return {
             "n_qubits": None,
             "MCX_gates": None,

@@ -75,37 +75,26 @@ class ExactCoverQuantumSolver(QuantumSolver):
         self.s_size = len(subsets)              # Number of subsets
         self.b = math.ceil(math.log2(self.s_size))  # Qubits for counting
 
-    def find_resources(self, num_iterations=None):
-        """
-        Calculate the resources needed for the Exact Cover problem.
-        Parameters:
-        - num_iterations (int): Number of Grover iterations. If None, it is calculated automatically.
-        Returns:
-        - num_qubits (int): Number of qubits required.
-        - MCX_gates (int): Number of multi-controlled X gates required.
-        - total_gates (int): Total number of gates required.
-        """
-        # If num_iterations is not specified, calculate it based on the size of the problem
-        if num_iterations is None:
-            s_size = self.s_size
-            num_solutions = self.num_solutions
+    def resource_estimation(self):
+        s_size = self.s_size
+        num_solutions = self.num_solutions
 
-            # Set the decimal precision
-            mpmath.mp.dps = 50  # Adjust as needed for precision
+        # Set the decimal precision
+        mpmath.mp.dps = 50  # Adjust as needed for precision
 
-            # Compute logarithms to avoid large numbers
-            ln_2 = mpmath.log(2)
-            ln_pi_over_4 = mpmath.log(mpmath.pi / 4)
-            ln_num_solutions = mpmath.log(num_solutions)
+        # Compute logarithms to avoid large numbers
+        ln_2 = mpmath.log(2)
+        ln_pi_over_4 = mpmath.log(mpmath.pi / 4)
+        ln_num_solutions = mpmath.log(num_solutions)
 
-            # Calculate ln_a
-            ln_a = (s_size * ln_2 - ln_num_solutions) / 2
+        # Calculate ln_a
+        ln_a = (s_size * ln_2 - ln_num_solutions) / 2
 
-            # Calculate ln_num_iterations
-            ln_num_iterations = ln_pi_over_4 + ln_a
+        # Calculate ln_num_iterations
+        ln_num_iterations = ln_pi_over_4 + ln_a
 
-            # Compute num_iterations without overflow
-            num_iterations = int(mpmath.floor(mpmath.exp(ln_num_iterations)))
+        # Compute num_iterations without overflow
+        num_iterations = int(mpmath.floor(mpmath.exp(ln_num_iterations)))
 
         # Calculate the number of qubits
         num_qubits = self.s_size + self.u_size * self.b + 1
@@ -121,7 +110,6 @@ class ExactCoverQuantumSolver(QuantumSolver):
         MCX_gates = num_iterations * (oracle_gates + 2 * counter_gates)
         total_gates = (superpos_gates + prepare_anc_gates +
                     MCX_gates + num_iterations * diffuser_gates)
-
         return {
             "n_qubits": num_qubits,
             "MCX_gates": MCX_gates,

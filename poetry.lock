@@ -242,12 +242,12 @@ version = "0.4.6"
 description = "Cross-platform colored terminal text."
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
-groups = ["dev"]
-markers = "sys_platform == \"win32\""
+groups = ["main", "dev"]
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
+markers = {main = "platform_system == \"Windows\"", dev = "sys_platform == \"win32\""}
 
 [[package]]
 name = "comm"
@@ -1753,27 +1753,27 @@ six = ">=1.5"
 
 [[package]]
 name = "pytket"
-version = "2.6.0"
+version = "2.7.0"
 description = "Quantum computing toolkit and interface to the TKET compiler"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "pytket-2.6.0-cp310-cp310-macosx_13_0_arm64.whl", hash = "sha256:639bbf68e09232f833efce3a01e85a9783166f7d70cc399fd8ada122f089f0e3"},
-    {file = "pytket-2.6.0-cp310-cp310-macosx_13_0_x86_64.whl", hash = "sha256:02a9fa873c1300a8b0a86088ebd3cc1162d08d9e7fd27e6a6daae05feb2c98c5"},
-    {file = "pytket-2.6.0-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:cfd1ff5cff29c79856c87cfae3f48b35c18f7196b4c67963ea8b0599cb4701ac"},
-    {file = "pytket-2.6.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2e469707608eba32d08898e3cf27ef5a20fe027807c9cb1e90289f57c573f82e"},
-    {file = "pytket-2.6.0-cp310-cp310-win_amd64.whl", hash = "sha256:488ab02daad7e39bd613c101643be3c2d60279a89c146f43099228cdb10eef10"},
-    {file = "pytket-2.6.0-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:65f12f2c10666e2fd78e62a96f2b4e9facff358c83a821568e29e01a40ee9f52"},
-    {file = "pytket-2.6.0-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:09206723c59b171d11a6ff4ab0eca4c6f5c4622c863749a675730ba170f1fd9d"},
-    {file = "pytket-2.6.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7a6dc868a2297b2fef208ee3d1ac842d339672cf5919cbe2b1c851a6b2aa22e4"},
-    {file = "pytket-2.6.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:54835d247ffc55770f85c511e44fdcc7891717af32d1ee351417a25eba83086f"},
-    {file = "pytket-2.6.0-cp311-cp311-win_amd64.whl", hash = "sha256:45dd69df5bb53bfa7ac2afde01558f25d3d3cc969c342c45aeccc8ce3a470c82"},
-    {file = "pytket-2.6.0-cp312-abi3-macosx_13_0_arm64.whl", hash = "sha256:65e8291653bb443fc32d4113f92854da43b4b586f282020e6c92b7e39d70241b"},
-    {file = "pytket-2.6.0-cp312-abi3-macosx_13_0_x86_64.whl", hash = "sha256:284c6608feeb7e7d867113d626631b2c9bfc2eb76386ffdf9eee2ccaea63cc0c"},
-    {file = "pytket-2.6.0-cp312-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0459896701256cba342d333cfa9101fa31a1d0b11723092e4b444f7a8c2fac6b"},
-    {file = "pytket-2.6.0-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a63c222741644727ffeb1d3696d29c11a27a16849114d12c2e1b2672ab42eefd"},
-    {file = "pytket-2.6.0-cp312-abi3-win_amd64.whl", hash = "sha256:e1567aba40de39b919c3036b6988870d6d2a8504c9383605e5cb14966baa277b"},
+    {file = "pytket-2.7.0-cp310-cp310-macosx_13_0_arm64.whl", hash = "sha256:bf993678abb107257d93104022f52993502a769583ead523967ab27263950b6d"},
+    {file = "pytket-2.7.0-cp310-cp310-macosx_13_0_x86_64.whl", hash = "sha256:ef9679d3010be27e7901b2d0c1615d4e6edd681b4730ab0c7f974d0fcb58a275"},
+    {file = "pytket-2.7.0-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:35ad4d6ee4d824b47cc87381039e97f41547cbee301ff5cfb7a398544a8a3057"},
+    {file = "pytket-2.7.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:4784287a0ae33a428aa3598c5386b3c96ac9629cc84b5fd58022ed8a578ad132"},
+    {file = "pytket-2.7.0-cp310-cp310-win_amd64.whl", hash = "sha256:6a83f86a160119194a79d0c334c3b2b2f228858e7556c409f9bbfbb6d7320192"},
+    {file = "pytket-2.7.0-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:32b731e31a9f097d3f4243a89180001604ed0265956274d78e87915618992cd8"},
+    {file = "pytket-2.7.0-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:f058e26df3e0e497640257f8f9f0e67af415e8eb709a44457dbddaf4fdd763e2"},
+    {file = "pytket-2.7.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:33470d04afdecba12ea5fe36e72c98e7da7341ce6896e64dc1e53db3fe59f753"},
+    {file = "pytket-2.7.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:023711c0a3dae6e1932b915bb73be12bda2df04e46d0a69e2ebedb271dd944b9"},
+    {file = "pytket-2.7.0-cp311-cp311-win_amd64.whl", hash = "sha256:80266d433eb7ef8a5282bbf8263c54b0aea2b77c9cf80df3305bc139f24ee193"},
+    {file = "pytket-2.7.0-cp312-abi3-macosx_13_0_arm64.whl", hash = "sha256:0287d86a4d1a7ec069a481fc0ae57839a137b030dfae4d381dc2ea966790a720"},
+    {file = "pytket-2.7.0-cp312-abi3-macosx_13_0_x86_64.whl", hash = "sha256:b96e722c0585b3e66c705e9763529e544f4cde5fad7a403936b864cc31ac96e0"},
+    {file = "pytket-2.7.0-cp312-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:095ba0ab099959625aef488b82486e455689d93c79655069395af5b10aef583a"},
+    {file = "pytket-2.7.0-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5b44721b4a2d6b300faf091317cd64c9f0b7d1f7b887c0d10c0b6f7c7d80422a"},
+    {file = "pytket-2.7.0-cp312-abi3-win_amd64.whl", hash = "sha256:4123aa8c861bfb3eb417612635c0b2b7721ffbe817781a79ef6e4af5dda4821e"},
 ]
 
 [package.dependencies]
@@ -1792,21 +1792,22 @@ zx = ["autoray (>=0.6.12)", "numba (>=0.61.0)", "quimb (>=1.8.2)"]
 
 [[package]]
 name = "pytket-qiskit"
-version = "0.68.0"
+version = "0.69.0"
 description = "Extension for pytket, providing translation to and from the Qiskit framework"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "pytket_qiskit-0.68.0-py3-none-any.whl", hash = "sha256:971c8a40b8edf2bd8346b1c1b80293d2b0b4b418bd94cfe5ac60f45f6ccc60bd"},
+    {file = "pytket_qiskit-0.69.0-py3-none-any.whl", hash = "sha256:0a9f7c6dcb09c7e882d89871638da3621f63b3fff5f80f59b40ce62072da28d0"},
 ]
 
 [package.dependencies]
 numpy = ">=1.26.4"
-pytket = ">=2.4.1"
-qiskit = ">=2"
-qiskit-aer = ">=0.15.1"
-qiskit-ibm-runtime = ">=0.37.0"
+pytket = ">=2.6.0"
+qiskit = ">=2.0.3,<2.1.0"
+qiskit-aer = ">=0.17.1"
+qiskit-ibm-runtime = ">=0.40.1"
+symengine = ">=0.11"
 
 [[package]]
 name = "pytz"
@@ -1955,20 +1956,20 @@ cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 
 [[package]]
 name = "qiskit"
-version = "2.0.2"
+version = "2.0.3"
 description = "An open-source SDK for working with quantum computers at the level of extended quantum circuits, operators, and primitives."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "qiskit-2.0.2-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:93e357614eb06277c9dbce9a2ad3b9ebb966402e1f91cea06129f9ddf593247b"},
-    {file = "qiskit-2.0.2-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:07e380069fa4f10ab3082322aa76c866d3ac61b125a7a1d8eb084425d77aa4f1"},
-    {file = "qiskit-2.0.2-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ce89ee741463241a0ab0f2a0f68cba2850d00038b25df445b9190668c8961015"},
-    {file = "qiskit-2.0.2-cp39-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:a6f9b8aca280018dc42abd601df862f3444a1ca4863a85571260a8464c279174"},
-    {file = "qiskit-2.0.2-cp39-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:e2422c375cd1cbe2ff8f5b59361479a50c1df1b99ff6a29738bf744a41039dc1"},
-    {file = "qiskit-2.0.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6e7a52120623788768234fdc47f9c48cb0523f0cb66bb5408c1bc39048007f15"},
-    {file = "qiskit-2.0.2-cp39-abi3-win_amd64.whl", hash = "sha256:1764e40a4cf570ad30384c5c530a65c7765062c8e1ac50122b47d863ae8f5376"},
-    {file = "qiskit-2.0.2.tar.gz", hash = "sha256:4901496df2d891c8b1b3d79f5b255da6343153cc7dcee1e2caae95be58b8b354"},
+    {file = "qiskit-2.0.3-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:ebfc1ffe707b64aa4b27adb76afad506c91709b96e97d99133c8c4579660d81f"},
+    {file = "qiskit-2.0.3-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:3a8a5f9417a319b71fb3cf3e1bfb6a434c0a075626b7eb23ea2fa58d1c3d7cd7"},
+    {file = "qiskit-2.0.3-cp39-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:eaa98892ead3e57cdff587406484d1e13832520be41a406f3502eab9eb212a13"},
+    {file = "qiskit-2.0.3-cp39-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:4845436812540853c8f08f87f4a36243315bcfc00beac665f0ecaddd3d64edb3"},
+    {file = "qiskit-2.0.3-cp39-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:b6a4e81da0b9db367316e4d76719f9252b2416f09be038dce03f7fc2740439a5"},
+    {file = "qiskit-2.0.3-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bba21f4cae1554ba72b09f7d9a35639c1776f1c43339c6750af93e7395069168"},
+    {file = "qiskit-2.0.3-cp39-abi3-win_amd64.whl", hash = "sha256:59c9b0daaf745307e6449b7907b8c38a6a07eba905bd9496c02ce12a6a37f6ae"},
+    {file = "qiskit-2.0.3.tar.gz", hash = "sha256:fa016bc34619f9f58af06be79a6f2634eacc095f0a3e2e29cef9f00b451ca267"},
 ]
 
 [package.dependencies]
@@ -2224,6 +2225,28 @@ doc = ["intersphinx_registry", "jupyterlite-pyodide-kernel", "jupyterlite-sphinx
 test = ["Cython", "array-api-strict (>=2.0,<2.1.1)", "asv", "gmpy2", "hypothesis (>=6.30)", "meson", "mpmath", "ninja ; sys_platform != \"emscripten\"", "pooch", "pytest", "pytest-cov", "pytest-timeout", "pytest-xdist", "scikit-umfpack", "threadpoolctl"]
 
 [[package]]
+name = "seaborn"
+version = "0.13.2"
+description = "Statistical data visualization"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987"},
+    {file = "seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7"},
+]
+
+[package.dependencies]
+matplotlib = ">=3.4,<3.6.1 || >3.6.1"
+numpy = ">=1.20,<1.24.0 || >1.24.0"
+pandas = ">=1.2"
+
+[package.extras]
+dev = ["flake8", "flit", "mypy", "pandas-stubs", "pre-commit", "pytest", "pytest-cov", "pytest-xdist"]
+docs = ["ipykernel", "nbconvert", "numpydoc", "pydata_sphinx_theme (==0.10.0rc2)", "pyyaml", "sphinx (<6.0.0)", "sphinx-copybutton", "sphinx-design", "sphinx-issues"]
+stats = ["scipy (>=1.7)", "statsmodels (>=0.12)"]
+
+[[package]]
 name = "setuptools"
 version = "80.9.0"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
@@ -2438,6 +2461,28 @@ files = [
 ]
 
 [[package]]
+name = "tqdm"
+version = "4.67.1"
+description = "Fast, Extensible Progress Meter"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2"},
+    {file = "tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2"},
+]
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+dev = ["nbval", "pytest (>=6)", "pytest-asyncio (>=0.24)", "pytest-cov", "pytest-timeout"]
+discord = ["requests"]
+notebook = ["ipywidgets (>=6)"]
+slack = ["slack-sdk"]
+telegram = ["requests"]
+
+[[package]]
 name = "traitlets"
 version = "5.14.3"
 description = "Traitlets Python configuration system"
@@ -2526,4 +2571,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "f52a41edcc1bbd39d5f6327780c1d8f4c410afba501a3d4fd9b530ecc846f57c"
+content-hash = "a031b2e299511dc9a6e01c66c7e86aaa5c069a6e2d8c2b4122ee7068ea521170"
