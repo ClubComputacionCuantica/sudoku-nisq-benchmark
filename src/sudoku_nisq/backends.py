@@ -71,7 +71,7 @@ class BackendManager:
         try:
             devices = IBMQBackend.available_devices(instance=instance)
             device_names = [dev.device_name for dev in devices]
-            print(f"IBM authentication successful")
+            print("IBM authentication successful")
             print(f"Found {len(devices)} IBM devices available to your account")
             print(f"Available devices: {device_names}")
             return device_names
