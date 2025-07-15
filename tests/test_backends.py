@@ -70,7 +70,7 @@ def test_authenticate_quantinuum_success(mock_available_devices, mock_api):
     mock_api.return_value = mock_api_instance
     
     mock_device_info = MagicMock()
-    mock_device_info.backend_name = "H1-1"
+    mock_device_info.device_name = "H1-1"
     mock_available_devices.return_value = [mock_device_info]
 
     devices = BackendManager.authenticate_quantinuum()
