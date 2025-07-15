@@ -8,7 +8,7 @@ from pytket.passes import FlattenRegisters
 from sudoku_nisq.backends import BackendManager
 
 if TYPE_CHECKING:
-    from sudoku_nisq.q_sudoku import QSudoku
+    from .q_sudoku import QSudoku
 
 class QuantumSolver(ABC):
     """Abstract base class for quantum solvers.
@@ -159,8 +159,10 @@ class QuantumSolver(ABC):
         """
         with path.open("r") as f:
             circ_dict = json.load(f)
-        # Reconstruct full fidelity circuit
-        return Circuit.from_dict(circ_dict)
+        circ = Circuit.from_dict(circ_dict)
+        if circ is None:
+            raise ValueError(f"Failed to load circuit from {path}")
+        return circ
     
     def transpile_and_analyze(
         self,
@@ -282,16 +284,18 @@ class QuantumSolver(ABC):
         path = self.transpiled_circuit_path(backend_alias, optimisation_level)
         
         if self.store_transpiled and path.exists() and not force_run:
-            circuit = self.load_circuit(path)
+            compiled_circuit = self.load_circuit(path)
         else:
             # Transpile
-            circuit = backend.get_compiled_circuit(self.main_circuit, optimisation_level=optimisation_level)
+            compiled_circuit = backend.get_compiled_circuit(self.main_circuit, optimisation_level=optimisation_level)
             # Cache only if store_transpiled is True
             if self.store_transpiled:
-                self.save_circuit(circuit, path)
+                self.save_circuit(compiled_circuit, path)
 
-        # Execute circuit on backend
-        handle = backend.process_circuit(circuit, n_shots=shots)
+        # Guarantee type safety
+        if not isinstance(compiled_circuit, Circuit):
+            raise TypeError(f"Expected Circuit, got {type(compiled_circuit)}")
+        handle = backend.process_circuit(compiled_circuit, n_shots=shots)  # type: ignore[arg-type]
         result = backend.get_result(handle)
         return result
     
@@ -315,6 +319,8 @@ class QuantumSolver(ABC):
         
         # Create Aer backend and run simulation
         aer = AerBackend()
+        # At this point main_circuit is guaranteed to be non-None
+        assert self.main_circuit is not None
         handle = aer.process_circuit(self.main_circuit, n_shots=shots)
         result = aer.get_result(handle)
         

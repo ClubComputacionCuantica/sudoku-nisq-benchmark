@@ -70,7 +70,7 @@ class BackendManager:
         # List and return available devices after successful authentication
         try:
             devices = IBMQBackend.available_devices(instance=instance)
-            device_names = [dev.device_name for dev in devices]
+            device_names = [dev.device_name for dev in devices if dev.device_name is not None]
             print("IBM authentication successful")
             print(f"Found {len(devices)} IBM devices available to your account")
             print(f"Available devices: {device_names}")
@@ -95,7 +95,7 @@ class BackendManager:
             
         try:
             devices = IBMQBackend.available_devices(instance=instance)
-            return [dev.device_name for dev in devices]
+            return [dev.device_name for dev in devices if dev.device_name is not None]
         except Exception as e:
             print(f"Failed to list IBM devices: {e}")
             return []
@@ -153,7 +153,7 @@ class BackendManager:
 
         try:
             infos = QuantinuumBackend.available_devices(api_handler=api_handler)
-            names = [info.backend_name for info in infos]
+            names = [info.device_name for info in infos if info.device_name is not None]
             print("Quantinuum authentication successful")
             print(f"Found {len(names)} devices: {names}")
             return names
@@ -208,7 +208,7 @@ class BackendManager:
             provider=provider,
         )
         infos = QuantinuumBackend.available_devices(api_handler=api_handler)
-        return [info.backend_name for info in infos]
+        return [info.device_name for info in infos if info.device_name is not None]
     
     @classmethod
     def get(cls, alias: str) -> Any:
@@ -304,7 +304,7 @@ class BackendManager:
         return info
 
     @classmethod
-    def init_ibm(cls, api_token: str, instance: str, device: str, alias: str = None) -> str:
+    def init_ibm(cls, api_token: str, instance: str, device: str, alias: Optional[str] = None) -> str:
         """
         One-step IBM backend initialization: authenticate + add device.
         
@@ -340,7 +340,7 @@ class BackendManager:
             raise RuntimeError(f"Failed to initialize IBM backend '{device}' as '{alias}': {e}") from e
 
     @classmethod
-    def init_quantinuum(cls, service, token: str, device: str, alias: str = None) -> str:
+    def init_quantinuum(cls, service, token: str, device: str, alias: Optional[str] = None) -> str:
         """
         (Placeholder)
         One-step Quantinuum backend initialization: authenticate + add device.

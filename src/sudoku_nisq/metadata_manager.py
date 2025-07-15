@@ -199,7 +199,7 @@ class MetadataManager:
         encoding: str,
         backend_alias: str,
         opt_level: int,
-        backend_resources: Mapping[str, int],
+        backend_resources: Mapping[str, int | str],
     ) -> None:
         """Create and append a single CSV row for this backend resource update."""
         md = self.load()
@@ -354,6 +354,9 @@ class MetadataManager:
         solvers = md.get("solvers", {})
         for solver_name, solver_data in solvers.items():
             summary["solvers"][solver_name] = {}
+            # Type assertion to help mypy understand this is a dict
+            solver_summary = summary["solvers"][solver_name]
+            assert isinstance(solver_summary, dict)
             encodings = solver_data.get("encodings", {})
             
             for encoding_name, encoding_data in encodings.items():
@@ -366,6 +369,6 @@ class MetadataManager:
                 for backend_alias, backend_data in backends.items():
                     encoding_summary["backends"][backend_alias] = backend_data
                 
-                summary["solvers"][solver_name][encoding_name] = encoding_summary
+                solver_summary[encoding_name] = encoding_summary
         
         return summary

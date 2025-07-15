@@ -117,7 +117,7 @@ class QSudoku():
             gc.collect()
         self._solver = new_solver
     
-    def set_solver(self, solver_class: Type["QuantumSolver"], encoding: str = None, **solver_kwargs) -> "QuantumSolver":
+    def set_solver(self, solver_class: Type["QuantumSolver"], encoding: Optional[str] = None, **solver_kwargs) -> Optional["QuantumSolver"]:
         """Replace current solver with new one (auto-cleanup previous)"""
         # Create new solver
         new_solver = solver_class(
@@ -160,13 +160,13 @@ class QSudoku():
         backend = BackendManager.get(alias)  # Raises if not found
         self._attached_backends[alias] = backend
         
-    def init_ibm(self, api_token: str, instance: str, device: str, alias: str = None) -> str:
+    def init_ibm(self, api_token: str, instance: str, device: str, alias: Optional[str] = None) -> str:
         """Initialize and attach IBM backend to this puzzle"""
         alias = BackendManager.init_ibm(api_token, instance, device, alias)
         self.attach_backend(alias)
         return alias
         
-    def init_quantinuum(self, service, token: str, device: str, alias: str = None) -> str:
+    def init_quantinuum(self, service, token: str, device: str, alias: Optional[str] = None) -> str:
         """(Placeholder) Initialize and attach Quantinuum backend to this puzzle"""
         alias = BackendManager.init_quantinuum(service, token, device, alias)
         self.attach_backend(alias)
@@ -192,7 +192,8 @@ class QSudoku():
         if not self._solver:
             raise ValueError("No solver set. Call set_solver() first.")
             
-        return self._solver.run(backend_alias, shots, opt_level, **kwargs)
+        # TODO: Check QuantumSolver.run signature for correct argument type for opt_level
+        return self._solver.run(backend_alias, shots, False, opt_level, **kwargs)
     
     def run_aer(self, shots: int = 1024, **kwargs):
         """Run logical circuit on Aer simulator (no transpilation needed)"""
