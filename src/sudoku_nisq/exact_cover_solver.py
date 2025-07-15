@@ -2,8 +2,8 @@ import math
 import mpmath
 from copy import deepcopy
 from pytket import Circuit, Qubit, OpType
+from typing import Literal
 from sudoku_nisq.exact_cover_encoding import ExactCoverEncoding
-
 from sudoku_nisq.quantum_solver import QuantumSolver
 
 class ExactCoverQuantumSolver(QuantumSolver):
@@ -17,61 +17,62 @@ class ExactCoverQuantumSolver(QuantumSolver):
     Usage:
     - Initialize the solver with the problem instance.
     - Build the circuit using build_circuit().
-    - Simulate the circuit using aer_simulation().
-    - Analyze and plot the results using counts_plot().
 
     Example:
     # Define your problem instance
-            sudoku = Sudoku()   This also allows to select a simple encoding or an encoding in patterns
-        or general exact cover form
-            U = [A, B, C]
-            S = {'S_0': [U[2]], 'S_1': [U[0], U[2]], 'S_2': [U[0]], 'S_3': [U[1]], 'S_4': [U[0], U[1]]}
+            sudoku = QSudoku()  
     
     # Initialize the solver
-    solver = ExactCoverQuantumSolver(sudoku, simple=True)
+    solver = ExactCoverQuantumSolver(sudoku)
 
     # Build the quantum circuit
     circuit = solver.build_circuit()
     
     """  
-    def __init__(self, sudoku=None, simple=True, pattern=False,
-                 num_solutions=None, universe=None, subsets=None):
+    def __init__(self, sudoku=None, encoding: Literal["simple", "pattern"] = "simple",
+                 num_solutions=None, universe=None, subsets=None, **kwargs):
         """
         Initialize the ExactCoverQuantumSolver instance.
 
         Parameters:
         - sudoku: The Sudoku puzzle to solve.
-        - simple (bool): Whether to use simple encoding.
-        - pattern (bool): Whether to use pattern encoding.
+        - encoding: Which encoding to use ("simple" or "pattern").
+        - num_solutions: If you want to limit # of classical solutions extracted.
+        - universe: Custom universe for exact cover (optional).
+        - subsets: Custom subsets for exact cover (optional).
+        - **kwargs: Additional parameters passed to QuantumSolver base class
+                   (save_csv, csv_path, store_transpiled, etc.)
         """
         
-        # Initialize the base class with sudoku parameter
-        super().__init__(sudoku=sudoku)
+        """
+        encoding:  "simple"  → use the simple one-hot subsets,
+                   "pattern" → use the pattern-based subsets.
+        num_solutions:  if you want to limit # of classical solutions extracted
+        """
+        # Initialize the base class with all parameters
+        super().__init__(
+            sudoku=sudoku,
+            encoding=encoding,
+            **kwargs  # Pass through save_csv, csv_path, store_transpiled, etc.
+        )
+                    
+        # Initialize encoding
+        enc = ExactCoverEncoding(sudoku)
+        self.universe = enc.universe
         
-        if sudoku is not None:
-            
-            # Initialize encoding
-            encoding = ExactCoverEncoding(sudoku)
-            self.universe = encoding.universe
-            
-            # Determine which encoding to use
-            if simple is True:
-                subsets = encoding.simple_subsets
-            if pattern is True:
-                subsets = encoding.pattern_subsets
-            
-            self.subsets = subsets
-            
-            if num_solutions is None:
-                self.num_solutions = sudoku.count_solutions()
-
-        if sudoku is None:
-            self.universe = universe
-            self.subsets = subsets
-            self.num_solutions = num_solutions
+        # Determine which encoding to use
+        if encoding == "simple":
+            self.subsets = enc.simple_subsets
+        elif encoding == "pattern":
+            self.subsets = enc.pattern_subsets
+        else:
+            raise ValueError(f"Unknown encoding {encoding!r}")
+        
+        if num_solutions is None:
+            self.num_solutions = sudoku.count_solutions()
             
         self.u_size = len(self.universe)        # Total elements to cover
-        self.s_size = len(subsets)              # Number of subsets
+        self.s_size = len(self.subsets)              # Number of subsets
         self.b = math.ceil(math.log2(self.s_size))  # Qubits for counting
 
     def resource_estimation(self):
@@ -113,11 +114,10 @@ class ExactCoverQuantumSolver(QuantumSolver):
             "n_qubits": num_qubits,
             "MCX_gates": MCX_gates,
             "n_gates": total_gates,
-            "depth": None,          # depth not available here
-            "error": None           # this should be set if exception occurs instead
+            "depth": None  # Depth is not calculated here
         }
 
-    def build_circuit(self):
+    def _build_circuit(self):
         """
         Builds and returns the full quantum circuit for the Exact Cover problem.
 

@@ -16,7 +16,8 @@ dependencies = [
     "sudoku-py (>=1.0.0,<2.0.0)",
     "pandas (>=2.3.0,<3.0.0)",
     "tqdm (>=4.67.1,<5.0.0)",
-    "seaborn (>=0.13.2,<0.14.0)"
+    "seaborn (>=0.13.2,<0.14.0)",
+    "pytket-quantinuum (>=0.52.0,<0.53.0)"
 ]
 
 [tool.poetry]
@@ -26,7 +27,22 @@ packages = [
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
+ruff = "^0.12.3"
+pytest = "^8.4.1"
+mypy = "^1.16.1"
+pytest-cov = "^6.2.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+exclude = ["tests/"]
+
+[tool.mypy]
+ignore_missing_imports = true
+strict = false

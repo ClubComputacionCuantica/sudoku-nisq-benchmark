@@ -31,3 +31,10 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+
+# Testing cache
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/

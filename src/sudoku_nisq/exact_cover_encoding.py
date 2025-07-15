@@ -1,5 +1,5 @@
 from collections import defaultdict
-from sudoku_nisq.exact_pattern_generation import PatternGeneration
+from sudoku_nisq.sudoku_pattern_generation import PatternGeneration
 
 # The `ExactCoverEncoding` class generates constraints for an exact cover problem based on open tuples for any given sudoku puzzle
 
@@ -78,15 +78,15 @@ class ExactCoverEncoding:
             for pattern in patterns_list:
                 key = f'S_{i}'
                 for col in range(len(pattern)):
-                    k, l = pattern[col], col
-                    cell = (k, l)
+                    a, b = pattern[col], col
+                    cell = (a, b)
                     if cell not in omitted_tuples[digit]:
                         subsets[key].append(cell)
-                        row = ('row', k, digit)
+                        row = ('row', a, digit)
                         subsets[key].append(row)
-                        col_item = ('col', l, digit)
+                        col_item = ('col', b, digit)
                         subsets[key].append(col_item)
-                        subgrid = ('subgrid', (k // self.size) * self.size, (l // self.size) * self.size, digit)
+                        subgrid = ('subgrid', (a // self.size) * self.size, (b // self.size) * self.size, digit)
                         subsets[key].append(subgrid)
                 i += 1
         return dict(subsets)
@@ -124,13 +124,13 @@ class ExactCoverEncoding:
             for pattern in patterns_list:
                 key = f'S_{i}'
                 for col in range(len(pattern)):
-                    k, l = pattern[col], col
-                    cell = (k, l)
+                    a, b = pattern[col], col
+                    cell = (a, b)
                     if cell not in omitted_tuples[digit]:
                         subsets[key].append(cell)
-                        row = ('row', k, digit)
+                        row = ('row', a, digit)
                         subsets[key].append(row)
-                        col_item = ('col', l, digit)
+                        col_item = ('col', b, digit)
                         subsets[key].append(col_item)
                 i += 1
         return dict(subsets)
