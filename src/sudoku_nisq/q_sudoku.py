@@ -17,6 +17,7 @@ from sudoku_nisq.backends import BackendManager
 
 if TYPE_CHECKING:
     from sudoku_nisq.quantum_solver import QuantumSolver
+    from pytket.extensions.quantinuum.backends.credential_storage import CredentialStorage
 
 class QSudoku():
     """
@@ -166,9 +167,15 @@ class QSudoku():
         self.attach_backend(alias)
         return alias
         
-    def init_quantinuum(self, service, token: str, device: str, alias: Optional[str] = None) -> str:
-        """(Placeholder) Initialize and attach Quantinuum backend to this puzzle"""
-        alias = BackendManager.init_quantinuum(service, token, device, alias)
+    def init_quantinuum(
+        self, 
+        device: str, 
+        alias: Optional[str] = None,
+        token_store: Optional['CredentialStorage'] = None,
+        provider: Optional[str] = None,
+    ) -> str:
+        """Initialize and attach Quantinuum backend to this puzzle"""
+        alias = BackendManager.init_quantinuum(device, alias, token_store, provider)
         self.attach_backend(alias)
         return alias
     
@@ -200,6 +207,50 @@ class QSudoku():
         if not self._solver:
             raise ValueError("No solver set. Call set_solver() first.")
         return self._solver.run_aer(shots, **kwargs)
+    
+    def counts_plot(self, counts=None, backend_alias=None, shots=None, top_n=20, 
+                    show_valid_only=False, figsize=(12, 6)):
+        """
+        Create a bar plot of measurement counts with Sudoku-specific enhancements.
+        
+        This method provides an easy interface to visualize quantum execution results
+        with automatic validation highlighting and summary statistics.
+        
+        Args:
+            counts: Dictionary of measurement outcomes, pytket Result object, or None
+            backend_alias: Name of the backend used (for title display)
+            shots: Total number of shots (for title and percentage calculation)
+            top_n: Show only the top N most frequent outcomes (default: 20)
+            show_valid_only: If True, only show outcomes that represent valid Sudoku solutions
+            figsize: Figure size tuple (width, height)
+            
+        Examples:
+            # Plot results from Aer simulation
+            result = puzzle.run_aer(shots=1024)
+            puzzle.counts_plot(result, backend_alias="Aer", shots=1024)
+            
+            # Plot only valid solutions from hardware run
+            result = puzzle.run("ibm_brisbane", opt_level=1, shots=100)
+            puzzle.counts_plot(result, backend_alias="IBM Brisbane", show_valid_only=True)
+            
+            # Plot with custom counts dictionary
+            puzzle.counts_plot(my_counts, backend_alias="Custom", shots=500, top_n=10)
+        """
+        if not self._solver:
+            raise ValueError("No solver set. Call set_solver() first.")
+            
+        # Delegate to the solver's counts_plot method with QSudoku-specific defaults
+        if backend_alias is None:
+            backend_alias = "Unknown Backend"
+            
+        return self._solver.counts_plot(
+            counts=counts,
+            backend_alias=backend_alias, 
+            shots=shots,
+            top_n=top_n,
+            show_valid_only=show_valid_only,
+            figsize=figsize
+        )
     
     def report_resources(self):
         """Get resource summary from metadata"""

@@ -11,7 +11,7 @@ Key design principles:
 Usage:
     # One-time setup
     BackendManager.init_ibm(api_token="...", instance="...", device="ibm_brisbane")  
-    BackendManager.init_quantinuum(service=..., token="...", device="H1-1", alias="h1")
+    BackendManager.init_quantinuum(device="H1-1", alias="h1", provider="microsoft")
     
     # Access backends
     backend = BackendManager.get("ibm_brisbane")
@@ -340,16 +340,21 @@ class BackendManager:
             raise RuntimeError(f"Failed to initialize IBM backend '{device}' as '{alias}': {e}") from e
 
     @classmethod
-    def init_quantinuum(cls, service, token: str, device: str, alias: Optional[str] = None) -> str:
+    def init_quantinuum(
+        cls, 
+        device: str, 
+        alias: Optional[str] = None,
+        token_store: Optional[CredentialStorage] = None,
+        provider: Optional[str] = None,
+    ) -> str:
         """
-        (Placeholder)
         One-step Quantinuum backend initialization: authenticate + add device.
         
         Args:
-            service: Quantinuum service configuration
-            token: Your Quantinuum token
             device: Quantinuum device name (e.g., "H1-1", "H2-2E")
             alias: Optional alias for the device (defaults to device name)
+            token_store: Where to save auth tokens (defaults to in-memory)
+            provider: e.g. 'microsoft' for federated login
             
         Returns:
             str: The alias used for the registered backend
@@ -365,13 +370,12 @@ class BackendManager:
             raise ValueError(f"Backend alias '{alias}' already exists. Available: {list(cls._backends.keys())}")
         
         try:
-            # For now, use the existing multi-step approach
-            # TODO: Implement proper one-step initialization when service parameter is clarified
+            # Authenticate if needed
             if not cls._quantinuum_configured:
-                cls.authenticate_quantinuum()
+                cls.authenticate_quantinuum(token_store, provider)
             
             # Add the specific device
-            cls.add_quantinuum_device(device, alias)
+            cls.add_quantinuum_device(device, alias, token_store, provider)
             return alias
             
         except Exception as e:

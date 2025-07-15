@@ -325,6 +325,201 @@ class QuantumSolver(ABC):
         result = aer.get_result(handle)
         
         return result
+    
+    def counts_plot(self, counts=None, backend_alias=None, shots=None, top_n=20, 
+                    show_valid_only=False, figsize=(12, 6)):
+        """
+        Create a bar plot of measurement counts with Sudoku-specific enhancements.
+        
+        This method provides rich visualization for analyzing quantum execution results
+        with automatic validation highlighting and summary statistics.
+        
+        Args:
+            counts: Dictionary of measurement outcomes, pytket Result object, or None
+            backend_alias: Name of the backend used (for title display)
+            shots: Total number of shots (for title and percentage calculation)
+            top_n: Show only the top N most frequent outcomes (default: 20)
+            show_valid_only: If True, only show outcomes that represent valid Sudoku solutions
+            figsize: Figure size tuple (width, height)
+            
+        Examples:
+            # Plot results from Aer simulation
+            result = solver.run_aer(shots=1024)
+            solver.counts_plot(result, backend_alias="Aer", shots=1024)
+            
+            # Plot only valid solutions from hardware run
+            result = solver.run("ibm_brisbane", opt_level=1, shots=100)
+            solver.counts_plot(result, backend_alias="IBM Brisbane", show_valid_only=True)
+        """
+        import matplotlib.pyplot as plt
+        
+        # Handle different input types
+        if counts is None:
+            raise ValueError("No counts provided. Pass counts dictionary or run a quantum execution first.")
+        
+        # Extract counts from pytket Result object if needed
+        if hasattr(counts, 'get_counts'):
+            counts_dict = counts.get_counts()
+        elif isinstance(counts, dict):
+            counts_dict = counts
+        else:
+            raise ValueError("counts must be a dictionary or pytket Result object with get_counts() method")
+        
+        if not counts_dict:
+            raise ValueError("Empty counts dictionary")
+        
+        # Filter valid solutions if requested
+        if show_valid_only:
+            filtered_counts = {}
+            for bitstring, count in counts_dict.items():
+                # Convert to string format for validation
+                if isinstance(bitstring, tuple):
+                    bitstring_str = ''.join(str(bit) for bit in bitstring)
+                else:
+                    bitstring_str = str(bitstring)
+                
+                if self._is_valid_solution(bitstring_str):
+                    filtered_counts[bitstring] = count
+            
+            counts_dict = filtered_counts
+            if not counts_dict:
+                print("No valid solutions found in measurement outcomes")
+                return
+        
+        # Sort by frequency and take top_n
+        sorted_counts = sorted(counts_dict.items(), key=lambda x: x[1], reverse=True)
+        if len(sorted_counts) > top_n:
+            top_counts = dict(sorted_counts[:top_n])
+            other_count = sum(count for _, count in sorted_counts[top_n:])
+            if other_count > 0:
+                top_counts[f"Others ({len(sorted_counts) - top_n})"] = other_count
+        else:
+            top_counts = dict(sorted_counts)
+        
+        # Calculate total shots and percentages
+        total_shots = shots or sum(counts_dict.values())
+        labels = list(top_counts.keys())
+        values = list(top_counts.values())
+        percentages = [100 * v / total_shots for v in values]
+        
+        # Convert labels to strings for display and validation
+        label_strings = []
+        for label in labels:
+            if isinstance(label, tuple):
+                # Convert tuple to bitstring format
+                label_str = ''.join(str(bit) for bit in label)
+            elif isinstance(label, str):
+                label_str = label
+            else:
+                label_str = str(label)
+            label_strings.append(label_str)
+        
+        # Create the plot
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Color bars - hybrid approach: blue default, validation colors when analyzing validity
+        colors = []
+        # Check if we should use validation colors (method exists and we're not filtering to valid only)
+        has_validation = hasattr(self, '_is_valid_solution') and callable(getattr(self, '_is_valid_solution', None))
+        use_validation_colors = not show_valid_only and has_validation
+        
+        for i, label_str in enumerate(label_strings):
+            if label_str.startswith("Others"):
+                colors.append('lightgray')
+            elif show_valid_only or not use_validation_colors:
+                # Always blue when filtering for valid only, or when not doing validation analysis
+                colors.append('steelblue')
+            else:
+                # Use validation colors only when explicitly analyzing validity
+                try:
+                    if self._is_valid_solution(label_str):
+                        colors.append('steelblue')
+                    else:
+                        colors.append('lightcoral')
+                except Exception:
+                    # Fallback to blue if validation fails
+                    colors.append('steelblue')
+        
+        bars = ax.bar(range(len(labels)), values, color=colors, alpha=0.7)
+        
+        # Add percentage labels on bars
+        for i, (bar, pct) in enumerate(zip(bars, percentages)):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + total_shots*0.01,
+                    f'{pct:.1f}%', ha='center', va='bottom', fontsize=8)
+        
+        # Customize the plot
+        ax.set_xlabel('Measurement Outcomes (Bitstrings)')
+        ax.set_ylabel('Counts')
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(label_strings, rotation=45, ha='right')
+        
+        # Enhanced title with key information
+        title_parts = [f"{self.solver_name} Results"]
+        if backend_alias:
+            title_parts.append(f"Backend: {backend_alias}")
+        else:
+            title_parts.append("Backend: Aer Simulator")  # Default for run_aer
+        if total_shots:
+            title_parts.append(f"Shots: {total_shots}")
+        if show_valid_only:
+            title_parts.append("(Valid Solutions Only)")
+        
+        ax.set_title(" | ".join(title_parts))
+        
+        # Add grid for better readability
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Add legend only when using validation colors
+        if use_validation_colors:
+            from matplotlib.patches import Patch
+            legend_elements = [
+                Patch(facecolor='steelblue', alpha=0.7, label='Valid Solutions'),
+                Patch(facecolor='lightcoral', alpha=0.7, label='Invalid Solutions'),
+                Patch(facecolor='lightgray', alpha=0.7, label='Others')
+            ]
+            ax.legend(handles=legend_elements, loc='upper right')
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Print summary statistics
+        valid_count = sum(count for bitstring, count in counts_dict.items() 
+                         if self._is_valid_solution(
+                             ''.join(str(bit) for bit in bitstring) if isinstance(bitstring, tuple) else str(bitstring)
+                         ))
+        print("\nSummary:")
+        print(f"Total unique outcomes: {len(counts_dict)}")
+        print(f"Total shots: {total_shots}")
+        print(f"Valid solutions found: {valid_count} ({100*valid_count/total_shots:.2f}%)")
+        most_frequent_key = sorted_counts[0][0]
+        most_frequent_str = ''.join(str(bit) for bit in most_frequent_key) if isinstance(most_frequent_key, tuple) else str(most_frequent_key)
+        print(f"Most frequent outcome: {most_frequent_str} ({100*sorted_counts[0][1]/total_shots:.2f}%)")
+
+    def _is_valid_solution(self, bitstring):
+        """
+        Check if a measurement outcome represents a valid Sudoku solution.
+        
+        This default implementation returns True for all inputs, which means all bars
+        will be blue. Subclasses should override this method to implement proper
+        validation based on their specific encoding schemes.
+        
+        Args:
+            bitstring: String representation of measurement outcome
+            
+        Returns:
+            bool: True if the bitstring represents a valid solution, False otherwise
+            
+        Example implementation for subclasses:
+            def _is_valid_solution(self, bitstring):
+                # Convert bitstring to Sudoku solution
+                solution = self.decode_bitstring(bitstring)
+                # Check if solution satisfies Sudoku constraints
+                return self.validate_sudoku_solution(solution)
+        """
+        # Default implementation - shows that validation is "implemented" but always returns True
+        # This encourages subclasses to override with real validation
+        return True
 
     @staticmethod
     def count_mcx_gates(circuit: Circuit) -> int:
