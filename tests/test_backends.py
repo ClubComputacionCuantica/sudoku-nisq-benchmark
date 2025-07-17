@@ -21,16 +21,15 @@ def test_initial_state():
     assert not BackendManager._quantinuum_configured
 
 @patch('sudoku_nisq.backends.set_ibmq_config')
-@patch('sudoku_nisq.backends.IBMQBackend.available_devices')
-def test_authenticate_ibm_success(mock_available_devices, mock_set_config):
+@patch('sudoku_nisq.backends.BackendManager.list_available_ibm_devices')
+def test_authenticate_ibm_success(mock_list_devices, mock_set_config):
     """Test successful IBM authentication."""
-    mock_device = MagicMock()
-    mock_device.device_name = "ibm_test_device"
-    mock_available_devices.return_value = [mock_device]
+    mock_list_devices.return_value = ["ibm_test_device"]
 
     devices = BackendManager.authenticate_ibm("fake_token", "fake_instance")
 
     mock_set_config.assert_called_once_with(ibmq_api_token="fake_token", instance="fake_instance")
+    mock_list_devices.assert_called_once()
     assert BackendManager._ibm_configured
     assert devices == ["ibm_test_device"]
 
@@ -40,6 +39,34 @@ def test_authenticate_ibm_failure(mock_set_config):
     with pytest.raises(Exception, match="Auth Error"):
         BackendManager.authenticate_ibm("fake_token", "fake_instance")
     assert not BackendManager._ibm_configured
+
+@patch('sudoku_nisq.backends.BackendManager.list_available_ibm_devices')
+def test_authenticate_ibm_already_configured(mock_list_devices):
+    """Test IBM authentication when already configured (should skip auth and list devices)."""
+    # Simulate already configured state
+    BackendManager._ibm_configured = True
+    mock_list_devices.return_value = ["ibm_device1", "ibm_device2"]
+    
+    devices = BackendManager.authenticate_ibm("fake_token", "fake_instance")
+    
+    # Should call list_available_ibm_devices without any parameters
+    mock_list_devices.assert_called_once_with()
+    assert devices == ["ibm_device1", "ibm_device2"]
+    
+@patch('sudoku_nisq.backends.set_ibmq_config')
+@patch('sudoku_nisq.backends.BackendManager.list_available_ibm_devices')
+def test_authenticate_ibm_overwrite(mock_list_devices, mock_set_config):
+    """Test IBM authentication with overwrite=True."""
+    # Simulate already configured state
+    BackendManager._ibm_configured = True
+    mock_list_devices.return_value = ["ibm_test_device"]
+    
+    devices = BackendManager.authenticate_ibm("fake_token", "fake_instance", overwrite=True)
+    
+    # Should call set_ibmq_config even when already configured due to overwrite=True
+    mock_set_config.assert_called_once_with(ibmq_api_token="fake_token", instance="fake_instance")
+    mock_list_devices.assert_called_once()
+    assert devices == ["ibm_test_device"]
 
 @patch('sudoku_nisq.backends.IBMQBackend')
 def test_add_ibm_device(mock_ibmq_backend):
@@ -61,6 +88,66 @@ def test_add_ibm_device_without_auth():
     """Test that adding an IBM device without prior authentication fails."""
     with pytest.raises(RuntimeError, match=r"Call authenticate_ibm\(\) before adding devices"):
         BackendManager.add_ibm_device("test_device")
+
+@patch('sudoku_nisq.backends.QiskitRuntimeService')
+def test_list_available_ibm_devices_success(mock_qiskit_runtime_service):
+    """Test successful listing of IBM devices."""
+    # Simulate authentication
+    BackendManager._ibm_configured = True
+    
+    # Mock QiskitRuntimeService().backends()
+    mock_runtime_instance = MagicMock()
+    mock_device1 = MagicMock()
+    mock_device1.backend_name = "ibm_brisbane"
+    mock_device2 = MagicMock()
+    mock_device2.backend_name = None  # Test filtering of None values
+    mock_device3 = MagicMock()
+    mock_device3.backend_name = "ibm_kyiv"
+    mock_runtime_instance.backends.return_value = [mock_device1, mock_device2, mock_device3]
+    mock_qiskit_runtime_service.return_value = mock_runtime_instance
+    
+    devices = BackendManager.list_available_ibm_devices()
+    
+    mock_runtime_instance.backends.assert_called_once()
+    assert devices == ["ibm_brisbane", "ibm_kyiv"]  # Should filter out None values
+
+def test_list_available_ibm_devices_not_configured():
+    """Test that listing devices without authentication fails."""
+    with pytest.raises(RuntimeError, match="Call authenticate_ibm\\(\\) first"):
+        BackendManager.list_available_ibm_devices()
+
+@patch('sudoku_nisq.backends.QiskitRuntimeService', side_effect=Exception("QiskitRuntimeService error"))
+@patch('sudoku_nisq.backends.IBMQBackend.available_devices')
+def test_list_available_ibm_devices_fallback(mock_available_devices, mock_qiskit_runtime_service):
+    """Test fallback mechanism when QiskitRuntimeService fails."""
+    # Simulate authentication
+    BackendManager._ibm_configured = True
+    
+    # Mock fallback method
+    mock_device = MagicMock()
+    mock_device.backend_name = "ibm_fallback_device"
+    mock_available_devices.return_value = [mock_device]
+    
+    devices = BackendManager.list_available_ibm_devices()
+    
+    # Should attempt QiskitRuntimeService first, then fallback
+    mock_qiskit_runtime_service.assert_called_once()
+    mock_available_devices.assert_called_once_with(device="ibm_brisbane")
+    assert devices == ["ibm_fallback_device"]
+
+@patch('sudoku_nisq.backends.QiskitRuntimeService', side_effect=Exception("QiskitRuntimeService error"))
+@patch('sudoku_nisq.backends.IBMQBackend.available_devices', side_effect=Exception("Fallback error"))
+def test_list_available_ibm_devices_both_fail(mock_available_devices, mock_qiskit_runtime_service):
+    """Test when both QiskitRuntimeService and fallback fail."""
+    # Simulate authentication
+    BackendManager._ibm_configured = True
+    
+    devices = BackendManager.list_available_ibm_devices()
+    
+    # Should attempt both methods and return empty list
+    mock_qiskit_runtime_service.assert_called_once()
+    mock_available_devices.assert_called_once_with(device="ibm_brisbane")
+    assert devices == []
 
 @patch('sudoku_nisq.backends.QuantinuumAPI')
 @patch('sudoku_nisq.backends.QuantinuumBackend.available_devices')
@@ -101,7 +188,7 @@ def test_get_backend_not_found():
 
     # Add one backend and test the error message again
     BackendManager._backends["some_backend"] = MagicMock()
-    with pytest.raises(ValueError, match="Available backends: \['some_backend'\]"):
+    with pytest.raises(ValueError, match=r"Available backends: \['some_backend'\]"):
         BackendManager.get("non_existent")
 
 def test_remove_backend():
@@ -148,3 +235,33 @@ def test_init_ibm_alias_exists():
     BackendManager._backends["existing_alias"] = MagicMock()
     with pytest.raises(ValueError, match="already exists"):
         BackendManager.init_ibm("token", "instance", "device", alias="existing_alias")
+
+@patch('sudoku_nisq.backends.BackendManager.add_ibm_device')
+def test_init_ibm_already_authenticated(mock_add_device):
+    """Test init_ibm when IBM is already authenticated."""
+    # Simulate already configured state
+    BackendManager._ibm_configured = True
+    
+    alias = BackendManager.init_ibm("token", "instance", "device", alias="my_device")
+    
+    # Should skip authentication and just add device
+    mock_add_device.assert_called_once_with("device", "my_device")
+    assert alias == "my_device"
+
+@patch('sudoku_nisq.backends.BackendManager.authenticate_ibm', side_effect=Exception("Auth failed"))
+def test_init_ibm_authentication_failure(mock_authenticate):
+    """Test init_ibm when authentication fails."""
+    with pytest.raises(RuntimeError, match="Failed to initialize IBM backend 'device' as 'device': Auth failed"):
+        BackendManager.init_ibm("token", "instance", "device")
+    
+    mock_authenticate.assert_called_once_with("token", "instance")
+
+@patch('sudoku_nisq.backends.BackendManager.authenticate_ibm')
+@patch('sudoku_nisq.backends.BackendManager.add_ibm_device', side_effect=Exception("Device add failed"))
+def test_init_ibm_device_add_failure(mock_add_device, mock_authenticate):
+    """Test init_ibm when device addition fails."""
+    with pytest.raises(RuntimeError, match="Failed to initialize IBM backend 'device' as 'device': Device add failed"):
+        BackendManager.init_ibm("token", "instance", "device")
+    
+    mock_authenticate.assert_called_once_with("token", "instance")
+    mock_add_device.assert_called_once_with("device", "device")

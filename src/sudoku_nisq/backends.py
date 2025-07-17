@@ -23,6 +23,7 @@ from pytket.extensions.qiskit import IBMQBackend, set_ibmq_config
 from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.quantinuum.backends.api_wrappers import QuantinuumAPI
 from pytket.extensions.quantinuum.backends.credential_storage import MemoryCredentialStorage, CredentialStorage
+from qiskit_ibm_runtime import QiskitRuntimeService
 
 class BackendManager:
     """
@@ -49,6 +50,7 @@ class BackendManager:
         cls,
         api_token: str,
         instance: Optional[str] = None,
+        overwrite: bool = False,
     ) -> List[str]:
         """
         Call this once at startup to configure IBM credentials and list available devices.
@@ -60,45 +62,52 @@ class BackendManager:
         Returns:
             List[str]: List of available device names for your account
         """
-        if cls._ibm_configured:
+        if cls._ibm_configured and not overwrite:
             # If already configured, just return available devices
-            return cls.list_available_ibm_devices(instance)
+            return cls.list_available_ibm_devices()
             
         set_ibmq_config(ibmq_api_token=api_token, instance=instance)
         cls._ibm_configured = True
         
         # List and return available devices after successful authentication
         try:
-            devices = IBMQBackend.available_devices(instance=instance)
-            device_names = [dev.device_name for dev in devices if dev.device_name is not None]
+            from qiskit_ibm_runtime import QiskitRuntimeService
+            QiskitRuntimeService.save_account(channel="ibm_quantum_platform", token=api_token, instance=instance, overwrite=True)
             print("IBM authentication successful")
-            print(f"Found {len(devices)} IBM devices available to your account")
-            print(f"Available devices: {device_names}")
-            return device_names
+            return cls.list_available_ibm_devices()
         except Exception as e:
-            print(f"Warning: Authentication succeeded but failed to list devices: {e}")
+            print(f"IBM authentication successful but failed to list devices: {e}")
             return []
 
     @classmethod
-    def list_available_ibm_devices(cls, instance: Optional[str] = None) -> List[str]:
+    def list_available_ibm_devices(cls) -> List[str]:
         """
         List available IBM devices without re-authentication.
         
-        Args:
-            instance: Your instance CRN
-            
         Returns:
             List[str]: List of available device names
         """
         if not cls._ibm_configured:
             raise RuntimeError("Call authenticate_ibm() first")
-            
         try:
-            devices = IBMQBackend.available_devices(instance=instance)
-            return [dev.device_name for dev in devices if dev.device_name is not None]
+            devices = QiskitRuntimeService().backends()
+            device_names = [dev.backend_name for dev in devices if dev.backend_name is not None]
+            print(f"Found {len(devices)} IBM devices available to your account")
+            print(f"Available devices: {device_names}")
+            return device_names
         except Exception as e:
-            print(f"Failed to list IBM devices: {e}")
-            return []
+            print(f"Warning: Failed to list devices using QiskitRuntimeService: {e}")
+            try:
+                print("Attempting fallback method to list devices...")
+                # Fallback method using IBMQBackend directly
+                devices = IBMQBackend.available_devices(device="ibm_brisbane")
+                device_names = [dev.device_name for dev in devices if dev.device_name is not None]
+                print(f"Found {len(devices)} IBM devices available to your account")
+                print(f"Available devices: {device_names}")
+                return device_names
+            except Exception as e:
+                print(f"Fallback also failed: {e}")
+                return []
 
     @classmethod
     def add_ibm_device(

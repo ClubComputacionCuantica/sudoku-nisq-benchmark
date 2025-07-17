@@ -4,7 +4,7 @@ ExperimentRunner: Bulk experiment framework for quantum Sudoku solving algorithm
 Provides robust bulk experimentation with automatic CSV logging, bounded memory usage,
 comprehensive error handling, and real-time progress tracking.
 """
-
+import csv
 import gc
 from pathlib import Path
 from typing import List, Dict, Type, Union
@@ -57,7 +57,7 @@ class ExperimentRunner:
             cache_main: Whether to cache main circuits
             cache_transpiled: Whether to cache transpiled circuits
             show_progress: Whether to show progress updates
-            progress_interval: Progress update interval (experiments)
+            progress_interval: Progress update interval (number of experiments)
         """
         self.solvers = solvers
         self.encodings_map = encodings_map
@@ -74,12 +74,27 @@ class ExperimentRunner:
         self.show_progress = show_progress
         self.progress_interval = progress_interval
         
+        # Track processed puzzle hashes
+        self._seen_hashes = set()
+        self._load_seen_hashes_from_csv()
+        
         # Progress tracking (counts CSV rows written)
         self._experiments_completed = 0
         self._total_experiments = self._calculate_total()
         
         # Validate backends upfront (fail-fast)
         self._validate_backends()
+
+    def _load_seen_hashes_from_csv(self):
+        """Load seen hashes from the existing CSV file."""
+        if self.csv_path.exists():
+            with open(self.csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                if "puzzle_hash" in reader.fieldnames:
+                    for row in reader:
+                        self._seen_hashes.add(row["puzzle_hash"])
+        if self.show_progress:
+            print(f"Loaded {len(self._seen_hashes)} seen hashes from {self.csv_path}")
     
     def _validate_backends(self):
         """Validate all backend aliases exist in BackendManager."""
@@ -142,6 +157,12 @@ class ExperimentRunner:
             csv_path=self.csv_path
         )
         
+        puzzle_hash = qs.get_hash()
+        if puzzle_hash in self._seen_hashes:
+            if self.show_progress:
+                print(f"Skipping duplicate puzzle with hash: {puzzle_hash}")
+            return  # Skip this puzzle
+        
         try:
             # Attach all backends once per puzzle
             for alias in self.backends:
@@ -151,8 +172,10 @@ class ExperimentRunner:
             for SolverCls in self.solvers:
                 for encoding in self.encodings_map[SolverCls]:
                     self._run_single_solver(qs, SolverCls, encoding)
+                    print(f"Completed {SolverCls.__name__} with encoding '{encoding}' for puzzle {puzzle_hash}")
                     
         finally:
+            self._seen_hashes.add(puzzle_hash)  # Mark this hash as seen
             # Cleanup: free puzzle memory only
             del qs
             gc.collect()
@@ -166,7 +189,7 @@ class ExperimentRunner:
                 encoding=encoding,
                 store_transpiled=self.cache_transpiled
             )
-            
+                        
             # Build main circuit with error logging
             try:
                 qs.build_circuit()  # Auto-logs main circuit CSV row on success
