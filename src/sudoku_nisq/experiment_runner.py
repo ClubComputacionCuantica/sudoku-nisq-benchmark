@@ -75,7 +75,7 @@ class ExperimentRunner:
         self.progress_interval = progress_interval
         
         # Track processed puzzle hashes
-        self._seen_hashes = set()
+        self._seen_hashes: set[str] = set()
         self._load_seen_hashes_from_csv()
         
         # Progress tracking (counts CSV rows written)

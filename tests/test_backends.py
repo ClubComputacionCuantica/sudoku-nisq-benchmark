@@ -116,28 +116,29 @@ def test_list_available_ibm_devices_not_configured():
     with pytest.raises(RuntimeError, match="Call authenticate_ibm\\(\\) first"):
         BackendManager.list_available_ibm_devices()
 
-@patch('sudoku_nisq.backends.QiskitRuntimeService', side_effect=Exception("QiskitRuntimeService error"))
 @patch('sudoku_nisq.backends.IBMQBackend.available_devices')
-def test_list_available_ibm_devices_fallback(mock_available_devices, mock_qiskit_runtime_service):
+@patch('sudoku_nisq.backends.QiskitRuntimeService', side_effect=Exception("QiskitRuntimeService error"))
+def test_list_available_ibm_devices_fallback(mock_qiskit_runtime_service, mock_available_devices):
     """Test fallback mechanism when QiskitRuntimeService fails."""
     # Simulate authentication
     BackendManager._ibm_configured = True
-    
-    # Mock fallback method
+
+    # Mock fallback method to return device info objects
     mock_device = MagicMock()
-    mock_device.backend_name = "ibm_fallback_device"
+    mock_device.device_name = "ibm_fallback_device"
     mock_available_devices.return_value = [mock_device]
-    
+
     devices = BackendManager.list_available_ibm_devices()
-    
-    # Should attempt QiskitRuntimeService first, then fallback
+
+    # Ensure QiskitRuntimeService is called first and fails
     mock_qiskit_runtime_service.assert_called_once()
+    # Ensure the fallback method is called
     mock_available_devices.assert_called_once_with(device="ibm_brisbane")
     assert devices == ["ibm_fallback_device"]
 
-@patch('sudoku_nisq.backends.QiskitRuntimeService', side_effect=Exception("QiskitRuntimeService error"))
 @patch('sudoku_nisq.backends.IBMQBackend.available_devices', side_effect=Exception("Fallback error"))
-def test_list_available_ibm_devices_both_fail(mock_available_devices, mock_qiskit_runtime_service):
+@patch('sudoku_nisq.backends.QiskitRuntimeService', side_effect=Exception("QiskitRuntimeService error"))
+def test_list_available_ibm_devices_both_fail(mock_qiskit_runtime_service, mock_available_devices):
     """Test when both QiskitRuntimeService and fallback fail."""
     # Simulate authentication
     BackendManager._ibm_configured = True

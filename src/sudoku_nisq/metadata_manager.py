@@ -84,11 +84,13 @@ class MetadataManager:
     ) -> None:
         """Set (or overwrite) the puzzle‐level fields if they differ."""
         md = self.load()
+        # Convert the board (matrix) to a string representation
+        board_str = json.dumps(board)
         fields = {
             "puzzle_hash":       self.puzzle_hash,
             "size":              size,
             "num_missing_cells": num_missing_cells,
-            "board":             board,
+            "board":             board_str,  # Save as string
         }
         for k, v in fields.items():
             if md.get(k) != v:

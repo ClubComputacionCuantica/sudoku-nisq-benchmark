@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-"""
-Integration test demonstrating the complete CSV export functionality
-"""
 import pytest
 import sys
 from pathlib import Path
@@ -142,9 +138,3 @@ def test_multiple_solvers_csv():
         assert len(rows) == 2
         solver_names = {row['solver_name'] for row in rows}
         assert solver_names == {"SolverA", "SolverB"}
-
-
-if __name__ == "__main__":
-    test_basic_csv_logging()
-    test_multiple_solvers_csv()
-    print("All tests passed!")

@@ -20,7 +20,7 @@ Sudoku is a natural example of a **constraint satisfaction problem (CSP)**, and 
 - Clean problem encoding with known structure
 - Natural translation into **exact cover** and other CSP formulations
 
-This makes Sudoku both accessible and rigorous to expose current limitations of quantum devices.
+This makes Sudoku both accessible to study current limitations of quantum devices.
 
 ---
 
@@ -39,7 +39,7 @@ This makes Sudoku both accessible and rigorous to expose current limitations of 
 
 ## Quantum Algorithms Implemented
 
-- **Grover-based Sudoku Solver**: 
+- **Grover-based Sudoku Solver**
 
 ---
 

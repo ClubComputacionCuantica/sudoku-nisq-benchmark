@@ -68,7 +68,6 @@ class BackendManager:
             
         set_ibmq_config(ibmq_api_token=api_token, instance=instance)
         cls._ibm_configured = True
-        
         # List and return available devices after successful authentication
         try:
             from qiskit_ibm_runtime import QiskitRuntimeService
@@ -99,7 +98,7 @@ class BackendManager:
             print(f"Warning: Failed to list devices using QiskitRuntimeService: {e}")
             try:
                 print("Attempting fallback method to list devices...")
-                # Fallback method using IBMQBackend directly
+                # Fallback method using IBMQBackend
                 devices = IBMQBackend.available_devices(device="ibm_brisbane")
                 device_names = [dev.device_name for dev in devices if dev.device_name is not None]
                 print(f"Found {len(devices)} IBM devices available to your account")
