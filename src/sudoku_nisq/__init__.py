@@ -1,5 +1,4 @@
-# from .my_module import MySubclass
-# Then you can do 
-# from sudoku_nisq import MySubclass
+from .q_sudoku import QSudoku
+from .experiment_runner import ExperimentRunner, run_experiment_batch
 
-from .exact_cover_solver import ExactCoverQuantumSolver
+__all__ = ["QSudoku", "ExperimentRunner", "run_experiment_batch"]

@@ -3,13 +3,22 @@ from sudoku_nisq.quantum_solver import QuantumSolver
 
 class GraphColoringQuantumSolver(QuantumSolver):
     """
-    Solver for graph-coloring using a quantum algorithm.
+    Solve Sudoku using graph coloring Grover-based algorithm encoded in a quantum circuit.
     """
 
-    def __init__(self):
-        super().__init__()
-
-    def get_circuit(self) -> Circuit:
-        circuit = Circuit()
+    def __init__(self, sudoku=None, **kwargs):
+        """
+        Initialize the GraphColoringQuantumSolver instance.
         
+        Args:
+            sudoku: The Sudoku puzzle to solve.
+            **kwargs: Additional parameters passed to QuantumSolver base class
+        """
+        super().__init__(sudoku=sudoku, **kwargs)
+
+    def _build_circuit(self) -> Circuit:
+        circuit = Circuit()
         return circuit
+    
+    def resource_estimation(self):
+        pass

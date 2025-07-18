@@ -24,7 +24,20 @@ Thumbs.db
 *.log
 *.tmp
 
+# Quantum solver cache
+.quantum_solver_cache/
+
+# Demo cache
+.demo_cache/
+
 # Distribution/packaging
 build/
 dist/
 *.egg-info/
+
+# Testing cache
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/

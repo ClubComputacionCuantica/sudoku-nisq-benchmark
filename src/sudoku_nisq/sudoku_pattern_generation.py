@@ -5,7 +5,7 @@ class PatternGeneration:
     def __init__(self,sudoku) -> None:
         self.open_tuples = sudoku.open_tuples
         self.fixed_tuples = sudoku.pre_tuples
-        size = sudoku.grid_size
+        size = sudoku.subgrid_size
         self.length = size*size
         self.patterns = self.generate_patterns_dict()
         self.patterns = self.pattern_cleanup()
