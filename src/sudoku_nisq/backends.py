@@ -11,7 +11,7 @@ Key design principles:
 Usage:
     # One-time setup
     BackendManager.init_ibm(api_token="...", instance="...", device="ibm_brisbane")  
-    BackendManager.init_quantinuum(device="H1-1", alias="h1", provider="microsoft")
+    BackendManager.init_quantinuum(device="H1-1", alias="h1", provider=)
     
     # Access backends
     backend = BackendManager.get("ibm_brisbane")
@@ -119,7 +119,7 @@ class BackendManager:
         register as many IBMQ devices as you like.
         
         Args:
-            device: IBM device name (e.g., "ibm_kyiv", "ibm_brisbane")
+            device: IBM device name (e.g. "ibm_brisbane")
             alias: Optional alias for the device (defaults to device name)
             
         Returns:
@@ -143,7 +143,7 @@ class BackendManager:
 
         Args:
             token_store: where to save auth tokens (defaults to in-memory).
-            provider: e.g. 'microsoft' for federated login.
+            provider:
 
         Returns:
             List[str]: names of all available Quantinuum backends.
@@ -185,7 +185,7 @@ class BackendManager:
             device: e.g. "H1-1", "H2-2E"
             alias: name under which to store it (defaults to `device`)
             token_store: same store you used for authenticate_quantinuum()
-            provider: same provider as above
+            provider:
 
         Returns:
             QuantinuumBackend: the ready-to-use backend instance
@@ -362,7 +362,7 @@ class BackendManager:
             device: Quantinuum device name (e.g., "H1-1", "H2-2E")
             alias: Optional alias for the device (defaults to device name)
             token_store: Where to save auth tokens (defaults to in-memory)
-            provider: e.g. 'microsoft' for federated login
+            provider:
             
         Returns:
             str: The alias used for the registered backend

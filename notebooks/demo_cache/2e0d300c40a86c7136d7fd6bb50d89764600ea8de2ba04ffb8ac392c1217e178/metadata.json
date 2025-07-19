@@ -1,0 +1,80 @@
+{
+  "board": "[[1, 2, 3, 4], [0, 4, 0, 2], [2, 3, 4, 1], [4, 1, 2, 3]]",
+  "num_missing_cells": 2,
+  "puzzle_hash": "2e0d300c40a86c7136d7fd6bb50d89764600ea8de2ba04ffb8ac392c1217e178",
+  "size": 4,
+  "solvers": {
+    "ExactCoverQuantumSolver": {
+      "encodings": {
+        "pattern": {
+          "backends": {
+            "ibm_brisbane": {
+              "0": {
+                "depth": 1627,
+                "n_gates": 3828,
+                "n_qubits": 11
+              },
+              "1": {
+                "depth": 1647,
+                "n_gates": 3950,
+                "n_qubits": 11
+              }
+            },
+            "ibm_torino": {
+              "0": {
+                "depth": 2006,
+                "n_gates": 4435,
+                "n_qubits": 11
+              },
+              "1": {
+                "depth": 1994,
+                "n_gates": 4203,
+                "n_qubits": 11
+              }
+            }
+          },
+          "main_circuit_resources": {
+            "depth": 16,
+            "n_gates": 32,
+            "n_mcx_gates": 17,
+            "n_qubits": 11
+          }
+        },
+        "simple": {
+          "backends": {
+            "ibm_brisbane": {
+              "0": {
+                "depth": 1911,
+                "n_gates": 4049,
+                "n_qubits": 11
+              },
+              "1": {
+                "depth": 1550,
+                "n_gates": 3746,
+                "n_qubits": 11
+              }
+            },
+            "ibm_torino": {
+              "0": {
+                "depth": 2112,
+                "n_gates": 4545,
+                "n_qubits": 11
+              },
+              "1": {
+                "depth": 2171,
+                "n_gates": 4447,
+                "n_qubits": 11
+              }
+            }
+          },
+          "main_circuit_resources": {
+            "depth": 16,
+            "n_gates": 32,
+            "n_mcx_gates": 17,
+            "n_qubits": 11
+          }
+        }
+      }
+    }
+  }
+}

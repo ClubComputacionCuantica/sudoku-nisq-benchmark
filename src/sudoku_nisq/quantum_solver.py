@@ -1,14 +1,13 @@
 import json
 from pathlib import Path
 from abc import ABC, abstractmethod
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import Any
 from pytket import Circuit, OpType
 from pytket.utils import gate_counts
 from pytket.passes import FlattenRegisters
-from sudoku_nisq.backends import BackendManager
 
-if TYPE_CHECKING:
-    from .q_sudoku import QSudoku
+from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
+from sudoku_nisq.metadata_manager import MetadataManager
 
 class QuantumSolver(ABC):
     """Abstract base class for quantum solvers.
@@ -18,33 +17,34 @@ class QuantumSolver(ABC):
 
     def __init__(
         self, 
-        sudoku: "QSudoku", 
+        puzzle: SudokuPuzzle,
+        metadata_manager: MetadataManager,
         encoding: str | None = None, 
         store_transpiled: bool = True,
     ):
         """
-        Initialize the QuantumSolver with QSudoku instance.
+        Initialize the QuantumSolver with SudokuPuzzle instance.
 
         Args:
-            sudoku: QSudoku instance (required)
+            puzzle: SudokuPuzzle instance (required)
+            metadata_manager: MetadataManager instance (required)
             encoding: Encoding strategy name
             store_transpiled: Whether to save transpiled circuits to disk (default True)
         """
         
-        # Input validation
-        if sudoku is None:
-            raise ValueError("sudoku instance is required - cannot be None")
+        if puzzle is None:
+            raise ValueError("A SudokuPuzzle instance is required.")
+        if metadata_manager is None:
+            raise ValueError("A MetadataManager instance is required.")
         
         # Sudoku integration for puzzle-specific caching
-        self.sudoku = sudoku
+        self.puzzle = puzzle
+        self._metadata = metadata_manager
         self.encoding = encoding or "default"  # Default encoding if not specified
         self.store_transpiled = store_transpiled
         
         # Circuit management
         self.main_circuit: Circuit | None = None
-
-        # Use QSudoku's metadata manager (single source of truth)
-        self._metadata = sudoku._metadata
         
         # Cache base derived from metadata manager
         self.cache_base = self._metadata.cache_base
@@ -65,7 +65,7 @@ class QuantumSolver(ABC):
     
     @property
     def puzzle_hash(self) -> str:
-        return self.sudoku.get_hash()
+        return self.puzzle.get_hash()
 
     @property
     def solver_name(self) -> str:
@@ -73,16 +73,16 @@ class QuantumSolver(ABC):
     
     @property
     def board(self) -> list[list[int]]:
-        return self.sudoku.board
-    
+        return self.puzzle.board
+
     @property
     def size(self) -> int:
-        return self.sudoku.board_size
-    
+        return self.puzzle.board_size
+
     @property
     def num_missing_cells(self) -> int:
-        return self.sudoku.num_missing_cells
-    
+        return self.puzzle.num_missing_cells
+
     @property
     def metadata_path(self) -> Path:
         # .quantum_solver_cache/{puzzle_hash}/metadata.json
@@ -132,7 +132,7 @@ class QuantumSolver(ABC):
         self.main_circuit = circ
         return circ
 
-    def draw_circuit(self, circuit: Circuit | None = None, **kwargs) -> Circuit:
+    def draw_circuit(self, circuit: Circuit | None = None, **kwargs) -> None:
         """
         Draw the main circuit to a file or return it as a Circuit object.
 
@@ -148,6 +148,7 @@ class QuantumSolver(ABC):
             if self.main_circuit is None:
                 raise ValueError("No main circuit available. Please build it first.")
             circuit = self.main_circuit
+        
         return draw(circuit)
 
     def save_circuit(self, circuit: Circuit, path: Path) -> None:
@@ -184,91 +185,73 @@ class QuantumSolver(ABC):
     
     def transpile_and_analyze(
         self,
+        backend: Any,
         backend_alias: str,
-        opt_levels: int | Sequence[int] = (0, 1, 2, 3),
+        opt_level: int = 0,
         force_overwrite: bool = False,
         force_rebuild_main: bool = False
-    ) -> dict[int, dict[str, Any]]:
+    ) -> dict[str, Any]:
         """
-        Transpile self.main_circuit for each opt_level independently.
-        You may pass a single int or a sequence of ints.
+        Transpile self.main_circuit at the given opt_level.
 
-        Returns a mapping:
-            {
-              opt_level: { "n_qubits":…, "n_gates":…, "depth":… }
-              OR
-              opt_level: { "error": <string> }
-            }
+        Returns:
+            { "n_qubits":…, "n_gates":…, "depth":… }
+            OR
+            { "error": <string> }
         """
-        # Ensure main circuit is in memory
+        # ensure main circuit
         if self.main_circuit is None:
             self.build_main_circuit(force_overwrite=force_rebuild_main)
-        
-        # Phase 2: Use backend from puzzle's attached backends
-        # Backend validation already done in QSudoku.transpile()
-        if hasattr(self.sudoku, '_attached_backends') and backend_alias in self.sudoku._attached_backends:
-            backend = self.sudoku._attached_backends[backend_alias]
-        else:
-            # Fallback to global registry for backward compatibility
-            backend = BackendManager.get(backend_alias)
 
-        # 1) Normalize to list of ints
-        if isinstance(opt_levels, int):
-            levels = [opt_levels]
-        else:
-            levels = list(opt_levels)
+        path = self.transpiled_circuit_path(backend_alias, opt_level)
 
-        results: dict[int, dict[str, Any]] = {}
+        try:
+            # load or compile
+            if self.store_transpiled and path.exists() and not force_overwrite:
+                tcirc = self.load_circuit(path)
+            else:
+                try:
+                    tcirc = backend.get_compiled_circuit(
+                        self.main_circuit,
+                        optimisation_level=opt_level
+                    )
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to compile circuit for {backend_alias} "
+                        f"at opt_level {opt_level}: {e}"
+                    )
+                if self.store_transpiled:
+                    self.save_circuit(tcirc, path)
 
-        for lvl in levels:
-            try:
-                # 2) Check if we should try to load from cache
-                path = self.transpiled_circuit_path(backend_alias, lvl)
-                tcirc = None
-                
-                if self.store_transpiled and path.exists() and not force_overwrite:
-                    # Load from cached file
-                    tcirc = self.load_circuit(path)
-                else:
-                    # 3) Transpile/compile for this backend+level
-                    try:
-                        tcirc = backend.get_compiled_circuit(self.main_circuit, optimisation_level=lvl)
-                    except Exception as e:
-                        raise RuntimeError(f"Failed to compile circuit for {backend_alias} at opt_level {lvl}: {e}")
-                    
-                    # 4) Cache it only if store_transpiled is True
-                    if self.store_transpiled:
-                        self.save_circuit(tcirc, path)
+            # extract metrics
+            res = {
+                "n_qubits": tcirc.n_qubits,
+                "n_gates":  tcirc.n_gates,
+                "depth":    tcirc.depth(),
+            }
 
-                # 5) Extract resources from transpiled circuit
-                res = {
-                    "n_qubits": tcirc.n_qubits,
-                    "n_gates":  tcirc.n_gates,
-                    "depth":    tcirc.depth(),
-                }
-                results[lvl] = res
+            # persist metadata
+            self._metadata.set_backend_resources(
+                self.solver_name, self.encoding,
+                backend_alias, opt_level, res
+            )
+            self._metadata.save()
+            
+            return res
 
-                # 6) Persist to metadata immediately (always done regardless of store_transpiled)
-                self._metadata.set_backend_resources(
-                    self.solver_name, self.encoding, backend_alias, lvl, res
-                )
-                self._metadata.save()
-
-            except Exception as e:
-                # Record the error and continue onward
-                error_res = {"error": str(e)}
-                results[lvl] = error_res
-                
-                # Log error to metadata (triggers CSV)
-                self._metadata.set_backend_resources(
-                    self.solver_name, self.encoding, backend_alias, lvl, error_res
-                )
-                self._metadata.save()
-
-        return results
+        except Exception as e:
+            err = {"error": str(e)}
+            self._metadata.set_backend_resources(
+                self.solver_name, self.encoding,
+                backend_alias, opt_level, err
+            )
+            self._metadata.save()
+            
+            return err
 
     def run(
         self,
+        backend: Any,
         backend_alias: str,
         shots: int = 1024,
         force_run: bool = False,
@@ -278,7 +261,8 @@ class QuantumSolver(ABC):
         Run the transpiled circuit on the specified backend.
 
         Args:
-            backend_alias: Backend alias to execute the circuit.
+            backend: Backend instance to execute the circuit.
+            backend_alias: Alias of the backend (used for metadata and logging).
             shots: Number of shots for execution.
             force_run: If True, re-transpile and re-run even if cached result exists.
             optimisation_level: Optimisation level for transpilation.
@@ -290,14 +274,6 @@ class QuantumSolver(ABC):
         # Ensure main circuit is built
         if self.main_circuit is None:
             self.build_main_circuit()
-        
-        # Phase 2: Use backend from puzzle's attached backends  
-        # Backend validation already done in QSudoku.run()
-        if hasattr(self.sudoku, '_attached_backends') and backend_alias in self.sudoku._attached_backends:
-            backend = self.sudoku._attached_backends[backend_alias]
-        else:
-            # Fallback to global registry for backward compatibility
-            backend = BackendManager.get(backend_alias)
             
         path = self.transpiled_circuit_path(backend_alias, optimisation_level)
         
@@ -332,7 +308,7 @@ class QuantumSolver(ABC):
         if self.main_circuit is None:
             self.build_main_circuit()
             
-        # Import Aer backend locally (not part of global registry)
+        # Import Aer backend locally
         from pytket.extensions.qiskit import AerBackend
         
         # Create Aer backend and run simulation
@@ -541,7 +517,7 @@ class QuantumSolver(ABC):
                 return self.validate_sudoku_solution(solution)
         """
         # Default implementation - shows that validation is "implemented" but always returns True
-        # This encourages subclasses to override with real validation
+        # Override with real validation
         return True
 
     @staticmethod
@@ -556,22 +532,3 @@ class QuantumSolver(ABC):
         """
         counts = gate_counts(circuit)
         return counts.get(OpType.CnX, 0)
-    
-    def export_metadata_csv(self, path: Path) -> None:
-        """
-        Flatten this solver's JSON metadata and write to the specified CSV path.
-        Creates multiple rows (one per solver+encoding+backend+opt_level combination).
-        """
-        self._metadata.export_full_metadata_csv(path)
-    
-    def ensure_puzzle_metadata(self):
-        """
-        Record puzzle-level info to metadata after sudoku instance is fully initialized.
-        This should be called after the sudoku board is properly set up.
-        """
-        self._metadata.ensure_puzzle_fields(
-            size=self.size,
-            num_missing_cells=self.num_missing_cells,
-            board=self.board,
-        )
-        self._metadata.save()

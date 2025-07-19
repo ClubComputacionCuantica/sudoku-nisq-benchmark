@@ -1,0 +1,222 @@
+{
+  "1d2d15a681cf66d5350cb3981d979d6152f2ae5554b19ffd1f0745e57e88b2b2": {
+    "ExactCoverQuantumSolver": {
+      "pattern": {
+        "__built__": true,
+        "build_time": 0.05460405349731445,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 0.30945396423339844
+          },
+          "1": {
+            "duration": 2.963704824447632
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 0.32561659812927246
+          },
+          "1": {
+            "duration": 1.1836130619049072
+          }
+        }
+      },
+      "simple": {
+        "__built__": true,
+        "build_time": 0.05375981330871582,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 1.4080743789672852
+          },
+          "1": {
+            "duration": 2.537752628326416
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 1.7725214958190918
+          },
+          "1": {
+            "duration": 1.528226613998413
+          }
+        }
+      }
+    }
+  },
+  "2e0d300c40a86c7136d7fd6bb50d89764600ea8de2ba04ffb8ac392c1217e178": {
+    "ExactCoverQuantumSolver": {
+      "pattern": {
+        "__built__": true,
+        "build_time": 0.05664467811584473,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 2.0097122192382812
+          },
+          "1": {
+            "duration": 2.2536227703094482
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 2.3757755756378174
+          },
+          "1": {
+            "duration": 2.428743839263916
+          }
+        }
+      },
+      "simple": {
+        "__built__": true,
+        "build_time": 0.0843658447265625,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 1.8747031688690186
+          },
+          "1": {
+            "duration": 2.2333171367645264
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 2.168576240539551
+          },
+          "1": {
+            "duration": 2.403611660003662
+          }
+        }
+      }
+    }
+  },
+  "7f68bcf465b9d40459360a9f4cf67263227490a1001428c1ac81aa94324b8863": {
+    "ExactCoverQuantumSolver": {
+      "pattern": {
+        "__built__": true,
+        "build_time": 0.045009613037109375,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 2.290780544281006
+          },
+          "1": {
+            "duration": 3.6114540100097656
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 1.7887804508209229
+          },
+          "1": {
+            "duration": 1.883413553237915
+          }
+        }
+      },
+      "simple": {
+        "__built__": true,
+        "build_time": 0.11970114707946777,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 2.2052114009857178
+          },
+          "1": {
+            "duration": 2.564966917037964
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 2.575666904449463
+          },
+          "1": {
+            "duration": 1.7452912330627441
+          }
+        }
+      }
+    }
+  },
+  "ce377247ae3449a469a499dcd9b84c10b709878093280d1e2783a708ab2b8ff9": {
+    "ExactCoverQuantumSolver": {
+      "pattern": {
+        "__built__": true,
+        "build_time": 0.05839347839355469,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 4.017459392547607
+          },
+          "1": {
+            "duration": 2.5591158866882324
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 1.6459436416625977
+          },
+          "1": {
+            "duration": 1.768589973449707
+          }
+        }
+      },
+      "simple": {
+        "__built__": true,
+        "build_time": 0.055611371994018555,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 1.4151206016540527
+          },
+          "1": {
+            "duration": 2.432877540588379
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 2.16569185256958
+          },
+          "1": {
+            "duration": 1.4558916091918945
+          }
+        }
+      }
+    }
+  },
+  "d6d5713893ca50df092c48b099d9eeb4e1a22fbd2184ea9db3bfa3cfa503b8fa": {
+    "ExactCoverQuantumSolver": {
+      "pattern": {
+        "__built__": true,
+        "build_time": 0.07498979568481445,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 51.42087745666504
+          },
+          "1": {
+            "duration": 136.4403431415558
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 50.42669486999512
+          },
+          "1": {
+            "duration": 65.22322607040405
+          }
+        }
+      },
+      "simple": {
+        "__built__": true,
+        "build_time": 0.07829141616821289,
+        "ibm_brisbane": {
+          "0": {
+            "duration": 46.28360605239868
+          },
+          "1": {
+            "duration": 99.84410238265991
+          }
+        },
+        "ibm_torino": {
+          "0": {
+            "duration": 127.25790977478027
+          },
+          "1": {
+            "duration": 48.24109077453613
+          }
+        }
+      }
+    }
+  }
+}

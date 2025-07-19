@@ -20,44 +20,43 @@ class ExactCoverQuantumSolver(QuantumSolver):
 
     Example:
     # Define your problem instance
-            sudoku = QSudoku()  
+            puzzle = SudokuPuzzle()
     
     # Initialize the solver
-    solver = ExactCoverQuantumSolver(sudoku)
+    solver = ExactCoverQuantumSolver(puzzle)
 
     # Build the quantum circuit
     circuit = solver.build_circuit()
     
     """  
-    def __init__(self, sudoku=None, encoding: Literal["simple", "pattern"] = "simple",
+    def __init__(self, puzzle=None, metadata_manager=None, encoding: Literal["simple", "pattern"] = "simple",
                  num_solutions=None, universe=None, subsets=None, **kwargs):
         """
         Initialize the ExactCoverQuantumSolver instance.
 
         Parameters:
-        - sudoku: The Sudoku puzzle to solve.
+        - puzzle: The Sudoku puzzle to solve.
+        - metadata_manager: MetadataManager instance for caching and logging.
         - encoding: Which encoding to use ("simple" or "pattern").
         - num_solutions: If you want to limit # of classical solutions extracted.
         - universe: Custom universe for exact cover (optional).
         - subsets: Custom subsets for exact cover (optional).
         - **kwargs: Additional parameters passed to QuantumSolver base class
-                   (save_csv, csv_path, store_transpiled, etc.)
-        """
-        
-        """
+
         encoding:  "simple"  → use the simple one-hot subsets,
                    "pattern" → use the pattern-based subsets.
         num_solutions:  if you want to limit # of classical solutions extracted
         """
         # Initialize the base class with all parameters
         super().__init__(
-            sudoku=sudoku,
+            puzzle=puzzle,
+            metadata_manager=metadata_manager,
             encoding=encoding,
-            **kwargs  # Pass through save_csv, csv_path, store_transpiled, etc.
+            **kwargs
         )
                     
         # Initialize encoding
-        enc = ExactCoverEncoding(sudoku)
+        enc = ExactCoverEncoding(puzzle)
         self.universe = enc.universe
         
         # Determine which encoding to use
@@ -69,7 +68,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
             raise ValueError(f"Unknown encoding {encoding!r}")
         
         if num_solutions is None:
-            self.num_solutions = sudoku.count_solutions()
+            self.num_solutions = puzzle.num_solutions
             
         self.u_size = len(self.universe)        # Total elements to cover
         self.s_size = len(self.subsets)              # Number of subsets

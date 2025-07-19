@@ -1,0 +1,80 @@
+{
+  "board": "[[1, 2, 3, 4], [3, 4, 1, 2], [2, 3, 4, 1], [4, 0, 0, 0]]",
+  "num_missing_cells": 3,
+  "puzzle_hash": "d6d5713893ca50df092c48b099d9eeb4e1a22fbd2184ea9db3bfa3cfa503b8fa",
+  "size": 4,
+  "solvers": {
+    "ExactCoverQuantumSolver": {
+      "encodings": {
+        "pattern": {
+          "backends": {
+            "ibm_brisbane": {
+              "0": {
+                "depth": 45178,
+                "n_gates": 132653,
+                "n_qubits": 33
+              },
+              "1": {
+                "depth": 44647,
+                "n_gates": 135152,
+                "n_qubits": 30
+              }
+            },
+            "ibm_torino": {
+              "0": {
+                "depth": 51869,
+                "n_gates": 150447,
+                "n_qubits": 32
+              },
+              "1": {
+                "depth": 51584,
+                "n_gates": 154540,
+                "n_qubits": 30
+              }
+            }
+          },
+          "main_circuit_resources": {
+            "depth": 62,
+            "n_gates": 196,
+            "n_mcx_gates": 114,
+            "n_qubits": 28
+          }
+        },
+        "simple": {
+          "backends": {
+            "ibm_brisbane": {
+              "0": {
+                "depth": 45178,
+                "n_gates": 132653,
+                "n_qubits": 33
+              },
+              "1": {
+                "depth": 44647,
+                "n_gates": 135152,
+                "n_qubits": 30
+              }
+            },
+            "ibm_torino": {
+              "0": {
+                "depth": 51869,
+                "n_gates": 150447,
+                "n_qubits": 32
+              },
+              "1": {
+                "depth": 51584,
+                "n_gates": 154540,
+                "n_qubits": 30
+              }
+            }
+          },
+          "main_circuit_resources": {
+            "depth": 62,
+            "n_gates": 196,
+            "n_mcx_gates": 114,
+            "n_qubits": 28
+          }
+        }
+      }
+    }
+  }
+}

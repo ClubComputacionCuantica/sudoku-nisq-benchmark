@@ -4,13 +4,13 @@ from sudoku_nisq.sudoku_pattern_generation import PatternGeneration
 # The `ExactCoverEncoding` class generates constraints for an exact cover problem based on open tuples for any given sudoku puzzle
 
 class ExactCoverEncoding:
-    def __init__(self, sudoku):
-        self.size = sudoku.subgrid_size
-        self.open_tuples = sudoku.open_tuples
-        self.set_tuples = sudoku.pre_tuples
-        
+    def __init__(self, puzzle):
+        self.size = puzzle.subgrid_size
+        self.open_tuples = puzzle.open_tuples
+        self.set_tuples = puzzle.pre_tuples
+
         self.simple_subsets = self.gen_simple_subsets()
-        possible_patterns = PatternGeneration(sudoku=sudoku)
+        possible_patterns = PatternGeneration(puzzle=puzzle)
         self.pattern_subsets = self.gen_patterns_subsets(possible_patterns=possible_patterns.patterns,fixed_tuples=self.set_tuples)
         
         if self.size >= 2:    
