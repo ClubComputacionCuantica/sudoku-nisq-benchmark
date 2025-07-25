@@ -108,7 +108,7 @@ resources = sudoku.report_resources()
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/RobBEN93/sudoku-nisq-benchmark.git
+   git clone https://github.com/ClubComputacionCuantica/sudoku-nisq-benchmark.git
    cd sudoku-nisq-benchmark
    ```
 
