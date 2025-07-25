@@ -31,8 +31,8 @@ This makes Sudoku accessible to study current limitations of quantum devices.
 
 ## Key Features
 
-- **Multiple Solver Algorithms and Encodings**: Includes Exact Cover and Graph Coloring solvers with flexible encoding strategies.
-- **Hardware Integration**: Currently supports IBM Quantum backends, with plans to integrate Quantinuum and other providers in the future.
+- **Multiple Solver Algorithms and Encodings**: Includes managing for different solvers with different encoding strategies.
+- **Hardware Integration**: Currently supports IBM Quantum backends, with plans to integrate other providers in the future.
 - **Circuit Caching and Memory Management**: Intelligent caching to avoid redundant computation.
 - **Automated Benchmarking**: ExperimentRunner for systematic evaluation across solvers, encodings, backends, and optimization levels.
 
