@@ -5,7 +5,6 @@
 - [Key Features](#key-features)
 - [Basic Usage](#basic-usage)
 - [Installation](#installation)
-- [Quantum Algorithms Implemented](#quantum-algorithms-implemented)
 - [Benchmarking Objectives](#benchmarking-objectives)
 - [Current Limitations](#current-limitations)
 - [Future Work](#future-work)
@@ -122,12 +121,6 @@ resources = sudoku.report_resources()
      ```bash
      poetry run python your_script.py
      ```
-
----
-
-## Quantum Algorithms Implemented
-
-- **Grover-based Sudoku Solver**
 
 ---
 
