@@ -30,10 +30,12 @@ This makes Sudoku accessible to study current limitations of quantum devices.
 
 ## Key Features
 
-- **Multiple Solver Algorithms and Encodings**: Includes managing for different solvers with different encoding strategies.
-- **Hardware Integration**: Currently supports IBM Quantum backends, with plans to integrate other providers in the future.
+- **Multiple Solver Algorithms and Encodings**: Framework scaffolding for multiple solvers; currently only `ExactCoverQuantumSolver` is functional.
+- **Hardware Integration (IBM Tested)**: IBM Quantum backends are the only provider actively tested and supported right now. Quantinuum and Braket hooks exist as placeholders/in development and are not yet stable for end users.
 - **Circuit Caching and Memory Management**: Intelligent caching to avoid redundant computation.
-- **Automated Benchmarking**: ExperimentRunner for systematic evaluation across solvers, encodings, backends, and optimization levels.
+- **Automated Benchmarking**: `ExperimentRunner` (work in progress) for systematic evaluation across solvers, encodings, backends, and optimization levels.
+
+> Note: Provider abstractions expose aliases for future devices, but non‑IBM backends may raise `NotImplementedError` or produce incomplete results until native circuits and authentication flows are finalized.
 
 ---
 
@@ -54,7 +56,7 @@ sudoku.plot_puzzle()
 
 ```python
 # Import the solver class
-from sudoku_nisq.exact_cover_solver import ExactCoverQuantumSolver
+from sudoku_nisq import ExactCoverQuantumSolver
 
 # Configure the solver with an encoding strategy
 sudoku.set_solver(ExactCoverQuantumSolver, encoding="simple") # or "pattern"
@@ -100,6 +102,7 @@ resources = sudoku.report_resources()
 ## Installation
 
 ### Prerequisites
+
 - Python 3.10+
 - Poetry (for dependency management and virtual environment setup)
 

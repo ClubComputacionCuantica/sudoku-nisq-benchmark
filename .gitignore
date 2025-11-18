@@ -41,3 +41,25 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Additional coverage files
+.coverage.*
+
+# Tox/Nox
+.tox/
+.nox/
+
+# Eggs
+.eggs/
+*.egg
+
+# Docs build
+site/
+docs/_build/
+
+# Type checkers
+.pyre/
+.pytype/
+
+# Notebook artifacts
+notebooks/**/demo_cache/

@@ -1,414 +1,382 @@
-"""
-BackendManager: Global registry for quantum hardware backends.
+"""Unified manager for quantum computing backends across multiple providers."""
 
-Provides a centralized way to authenticate once and access backends by alias.
-Key design principles:
-- One global registry for all hardware backends  
-- Fail-fast validation with helpful error messages
-- Simplified init_*() methods for one-step setup
-- Clear separation: Aer simulator handled separately, not in this registry
+from typing import Any, Dict, List, Optional
+from pytket.extensions.quantinuum.backends.credential_storage import CredentialStorage
+from .providers import QuantumProvider, IBMProvider, QuantinuumProvider
 
-Usage:
-    # One-time setup
-    BackendManager.init_ibm(api_token="...", instance="...", device="ibm_brisbane")  
-    BackendManager.init_quantinuum(device="H1-1", alias="h1", provider=)
-    
-    # Access backends
-    backend = BackendManager.get("ibm_brisbane")
-    all_aliases = BackendManager.all()
-"""
-
-from typing import Any, ClassVar, Dict, Optional, List
-from pytket.extensions.qiskit import IBMQBackend, set_ibmq_config
-from pytket.extensions.quantinuum import QuantinuumBackend
-from pytket.extensions.quantinuum.backends.api_wrappers import QuantinuumAPI
-from pytket.extensions.quantinuum.backends.credential_storage import MemoryCredentialStorage, CredentialStorage
-from qiskit_ibm_runtime import QiskitRuntimeService
 
 class BackendManager:
+    """Unified manager for quantum computing backends across multiple providers.
+
+    This class provides a single interface for managing quantum backends from different
+    providers (IBM, Quantinuum, etc.). It uses a provider pattern to keep provider-specific
+    code separate while maintaining a unified API.
+
+    :ivar dict[str, :class:`sudoku_nisq.providers.base.QuantumProvider`] _providers: Registry of quantum providers.
+    :ivar dict[str, str] _backend_to_provider: Mapping of backend aliases to provider names.
+
+    Example:
+        .. code-block:: python
+
+            # Create manager instance
+            manager = BackendManager()
+
+            # Initialize IBM backend
+            manager.authenticate_ibm(api_token="your_token", instance="your_instance")
+            manager.add_backend("ibm", "ibm_brisbane", alias="ibm_device")
+
+            # Initialize Quantinuum backend
+            manager.authenticate_quantinuum()
+            manager.add_backend("quantinuum", "H1-1", alias="quantinuum_device")
+
+            # Use backends uniformly
+            ibm_backend = manager.get("ibm_device")
+            quantinuum_backend = manager.get("quantinuum_device")
     """
-    Global registry for quantum hardware backends with fail-fast validation.
     
-    Design principles:
-    - Single global registry: authenticate once, use everywhere
-    - Fail-fast validation: helpful error messages on missing backends  
-    - One-step initialization: init_*() methods handle auth + device setup
-    - Hardware only: Aer simulator handled separately (not in registry)
-    
-    Key methods:
-    - init_ibm() / init_quantinuum(): One-step backend setup
-    - get(): Retrieve backend by alias (fails fast if not found)
-    - all(): List all registered aliases  
-    - validate_alias(): Explicit validation with helpful errors
-    """
-    _backends: ClassVar[Dict[str, Any]] = {}
-    _ibm_configured: ClassVar[bool] = False
-    _quantinuum_configured: ClassVar[bool] = False
-    
-    @classmethod
-    def authenticate_ibm(
-        cls,
-        api_token: str,
-        instance: Optional[str] = None,
-        overwrite: bool = False,
-    ) -> List[str]:
-        """
-        Call this once at startup to configure IBM credentials and list available devices.
+    def __init__(self):
+        self._providers: Dict[str, QuantumProvider] = {}
+        self._backend_to_provider: Dict[str, str] = {}
         
-        Args:
-            api_token: Your IBM API token
-            instance: Your instance CRN (long string beginning with "crn:")
-            
-        Returns:
-            List[str]: List of available device names for your account
-        """
-        if cls._ibm_configured and not overwrite:
-            # If already configured, just return available devices
-            return cls.list_available_ibm_devices()
-            
-        set_ibmq_config(ibmq_api_token=api_token, instance=instance)
-        cls._ibm_configured = True
-        # List and return available devices after successful authentication
-        try:
-            from qiskit_ibm_runtime import QiskitRuntimeService
-            QiskitRuntimeService.save_account(channel="ibm_quantum_platform", token=api_token, instance=instance, overwrite=True)
-            print("IBM authentication successful")
-            return cls.list_available_ibm_devices()
-        except Exception as e:
-            print(f"IBM authentication successful but failed to list devices: {e}")
-            return []
+        # Register built-in providers
+        self.register_provider(IBMProvider())
+        self.register_provider(QuantinuumProvider())
+    
+    def register_provider(self, provider: QuantumProvider) -> None:
+        """Register a new quantum provider.
 
-    @classmethod
-    def list_available_ibm_devices(cls) -> List[str]:
+        Args:
+            provider (:class:`~sudoku_nisq.providers.base.QuantumProvider`): The provider instance to register.
         """
-        List available IBM devices without re-authentication.
+        self._providers[provider.provider_name] = provider
+    
+    def get_provider(self, provider_name: str) -> QuantumProvider:
+        """Get a specific provider by name.
+
+        Args:
+            provider_name (str): Name of the provider to retrieve.
+
+        Returns:
+            :class:`~sudoku_nisq.providers.base.QuantumProvider`: The requested provider instance.
+
+        Raises:
+            ValueError: If the provider is not found.
+        """
+        if provider_name not in self._providers:
+            available = list(self._providers.keys())
+            raise ValueError(f"Provider '{provider_name}' not found. Available: {available}")
+        return self._providers[provider_name]
+    
+    def list_providers(self) -> List[str]:
+        """List all registered provider names.
         
         Returns:
-            List[str]: List of available device names
+            List[str]: List of provider names.
         """
-        if not cls._ibm_configured:
-            raise RuntimeError("Call authenticate_ibm() first")
-        try:
-            devices = QiskitRuntimeService().backends()
-            device_names = [dev.backend_name for dev in devices if dev.backend_name is not None]
-            print(f"Found {len(devices)} IBM devices available to your account")
-            print(f"Available devices: {device_names}")
-            return device_names
-        except Exception as e:
-            print(f"Warning: Failed to list devices using QiskitRuntimeService: {e}")
-            try:
-                print("Attempting fallback method to list devices...")
-                # Fallback method using IBMQBackend
-                devices = IBMQBackend.available_devices(device="ibm_brisbane")
-                device_names = [dev.device_name for dev in devices if dev.device_name is not None]
-                print(f"Found {len(devices)} IBM devices available to your account")
-                print(f"Available devices: {device_names}")
-                return device_names
-            except Exception as e:
-                print(f"Fallback also failed: {e}")
-                return []
-
-    @classmethod
-    def add_ibm_device(
-        cls,
-        device: str,
-        alias: Optional[str] = None,
-    ) -> IBMQBackend:
-        """
-        After you've called authenticate_ibm(), use this to
-        register as many IBMQ devices as you like.
+        return list(self._providers.keys())
+    
+    # Unified backend access methods
+    def get(self, alias: str) -> Any:
+        """Get a backend by alias from any provider.
         
         Args:
-            device: IBM device name (e.g. "ibm_brisbane")
-            alias: Optional alias for the device (defaults to device name)
+            alias (str): The alias of the backend to retrieve.
             
         Returns:
-            IBMQBackend: The initialized backend instance
-        """
-        if not cls._ibm_configured:
-            raise RuntimeError("Call authenticate_ibm() before adding devices")
-        name = alias or device
-        backend = IBMQBackend(device)
-        cls._backends[name] = backend
-        return backend
-    
-    @classmethod
-    def authenticate_quantinuum(
-        cls,
-        token_store: Optional[CredentialStorage] = None,
-        provider: Optional[str] = None,
-    ) -> List[str]:
-        """
-        Call once at startup to log in to Quantinuum and list available devices.
-
-        Args:
-            token_store: where to save auth tokens (defaults to in-memory).
-            provider:
-
-        Returns:
-            List[str]: names of all available Quantinuum backends.
-        """
-        if cls._quantinuum_configured:
-            return cls.list_available_quantinuum_devices(token_store, provider)
-
-        api_handler = QuantinuumAPI(
-            token_store=token_store or MemoryCredentialStorage(),
-            provider=provider,
-        )
-        # This will prompt for credentials if needed
-        api_handler.login()
-        cls._quantinuum_configured = True
-
-        try:
-            infos = QuantinuumBackend.available_devices(api_handler=api_handler)
-            names = [info.device_name for info in infos if info.device_name is not None]
-            print("Quantinuum authentication successful")
-            print(f"Found {len(names)} devices: {names}")
-            return names
-        except Exception as e:
-            print(f"Warning: Authenticated but failed to list devices: {e}")
-            return []
-
-    @classmethod
-    def add_quantinuum_device(
-        cls,
-        device: str,
-        alias: Optional[str] = None,
-        token_store: Optional[CredentialStorage] = None,
-        provider: Optional[str] = None,
-    ) -> QuantinuumBackend:
-        """
-        After you've called authenticate_quantinuum(), use this to
-        register a Quantinuum backend for later use.
-
-        Args:
-            device: e.g. "H1-1", "H2-2E"
-            alias: name under which to store it (defaults to `device`)
-            token_store: same store you used for authenticate_quantinuum()
-            provider:
-
-        Returns:
-            QuantinuumBackend: the ready-to-use backend instance
-        """
-        if not cls._quantinuum_configured:
-            raise RuntimeError("Call authenticate_quantinuum() before adding devices")
-
-        api_handler = QuantinuumAPI(
-            token_store=token_store or MemoryCredentialStorage(),
-            provider=provider,
-        )
-        name = alias or device
-        backend = QuantinuumBackend(device_name=device, api_handler=api_handler)
-        cls._backends[name] = backend
-        return backend
-
-    @classmethod
-    def list_available_quantinuum_devices(
-        cls,
-        token_store: Optional[CredentialStorage] = None,
-        provider: Optional[str] = None,
-    ) -> List[str]:
-        """
-        List devices without re‑authenticating.
-        """
-        api_handler = QuantinuumAPI(
-            token_store=token_store or MemoryCredentialStorage(),
-            provider=provider,
-        )
-        infos = QuantinuumBackend.available_devices(api_handler=api_handler)
-        return [info.device_name for info in infos if info.device_name is not None]
-    
-    @classmethod
-    def get(cls, alias: str) -> Any:
-        """
-        Retrieve a previously-registered backend by alias.
-        
-        Args:
-            alias: Backend alias to retrieve
-            
-        Returns:
-            Backend instance
+            Any: The backend instance ready for use.
             
         Raises:
-            ValueError: If backend not found (fail fast with helpful message)
+            ValueError: If the backend alias is not found.
         """
-        if alias not in cls._backends:
-            available = list(cls._backends.keys())
+        if alias not in self._backend_to_provider:
+            available = list(self._backend_to_provider.keys())
             if not available:
-                raise ValueError(f"Backend '{alias}' not found. No backends registered yet. "
-                               f"Call init_ibm() or init_quantinuum() first.")
+                raise ValueError(
+                    f"Backend '{alias}' not found. No backends registered yet. "
+                    f"Use authenticate and add_backend methods to register backends first."
+                )
             else:
                 raise ValueError(f"Backend '{alias}' not found. Available backends: {available}")
         
-        return cls._backends[alias]
+        provider_name = self._backend_to_provider[alias]
+        return self._providers[provider_name].get_backend(alias)
     
-    @classmethod
-    def all(cls) -> List[str]:
-        """
-        Return all registered backend aliases.
-        
-        Returns:
-            List[str]: List of all registered backend aliases
-        """
-        return list(cls._backends.keys())
-    
-    @classmethod
-    def all_backends(cls) -> Dict[str, Any]:
-        """
-        Return a shallow copy of alias → backend mapping.
-        
-        Returns:
-            Dict[str, Any]: Copy of the backend registry
-        """
-        return dict(cls._backends)
-    
-    @classmethod
-    def aliases(cls) -> List[str]:
-        """List all registered aliases."""
-        return list(cls._backends.keys())
-
-    @classmethod
-    def remove(cls, alias: str) -> None:
-        """
-        Unregister a backend by alias.
+    def add_backend(self, provider_name: str, device: str, alias: Optional[str] = None, **kwargs) -> Any:
+        """Add a backend through a specific provider.
         
         Args:
-            alias: Backend alias to remove
+            provider_name (str): Name of the provider (e.g., 'ibm', 'quantinuum').
+            device (str): Device name (e.g., 'ibm_brisbane', 'H1-1').
+            alias (Optional[str]): Custom alias for the backend.
+            **kwargs: Additional provider-specific arguments.
+            
+        Returns:
+            Any: The created backend instance.
             
         Raises:
-            ValueError: If alias not found
+            ValueError: If provider not found or alias already exists.
         """
-        if alias not in cls._backends:
-            available = list(cls._backends.keys())
-            raise ValueError(f"Cannot remove '{alias}' - not found. Available: {available}")
+        provider = self.get_provider(provider_name)
+        alias = alias or device
         
-        del cls._backends[alias]
-
-    @classmethod
-    def clear(cls) -> None:
-        """Clear the entire registry."""
-        cls._backends.clear()
-
-    @classmethod
-    def is_registered(cls, alias: str) -> bool:
-        """Check if an alias is present."""
-        return alias in cls._backends
-
-    @classmethod
-    def info(cls) -> Dict[str, Dict[str, Any]]:
+        if alias in self._backend_to_provider:
+            raise ValueError(f"Backend alias '{alias}' already exists")
+        
+        backend = provider.add_device(device, alias, **kwargs)
+        self._backend_to_provider[alias] = provider_name
+        return backend
+    
+    def remove(self, alias: str) -> None:
+        """Remove a backend from any provider.
+        
+        Args:
+            alias (str): The alias of the backend to remove.
+            
+        Raises:
+            ValueError: If the backend alias is not found.
         """
-        Return summary info for each registered backend:
-        { alias: { "type": ..., "device": ... }, … }
+        if alias not in self._backend_to_provider:
+            raise ValueError(f"Backend '{alias}' not found")
+        
+        provider_name = self._backend_to_provider[alias]
+        self._providers[provider_name].remove_backend(alias)
+        del self._backend_to_provider[alias]
+    
+    def all(self) -> List[str]:
+        """List all backend aliases across all providers.
+        
+        Returns:
+            List[str]: List of all registered backend aliases.
         """
-        info: Dict[str, Dict[str, Any]] = {}
-        for alias, be in cls._backends.items():
+        return list(self._backend_to_provider.keys())
+    
+    def all_backends(self) -> Dict[str, Any]:
+        """Get all backend instances across all providers.
+        
+        Returns:
+            Dict[str, Any]: Dictionary mapping alias to backend instance.
+        """
+        backends = {}
+        for alias in self._backend_to_provider:
             try:
-                info[alias] = {
-                    "type":   type(be).__name__,
-                    "device": getattr(be, "device_name", getattr(be, "name", None)),
-                }
+                backends[alias] = self.get(alias)
             except Exception as e:
-                info[alias] = {"error": str(e)}
-        return info
-
-    @classmethod
-    def init_ibm(cls, api_token: str, instance: str, device: str, alias: Optional[str] = None) -> str:
-        """
-        One-step IBM backend initialization: authenticate + add device.
-        
-        Args:
-            api_token: Your IBM API token
-            instance: Your instance CRN
-            device: IBM device name (e.g., "ibm_brisbane", "ibm_kyiv")
-            alias: Optional alias for the device (defaults to device name)
-            
-        Returns:
-            str: The alias used for the registered backend
-            
-        Raises:
-            ValueError: If alias already exists
-            RuntimeError: If authentication or device addition fails
-        """
-        alias = alias or device
-        
-        # Check for existing alias
-        if alias in cls._backends:
-            raise ValueError(f"Backend alias '{alias}' already exists. Available: {list(cls._backends.keys())}")
-        
-        try:
-            # Authenticate if needed
-            if not cls._ibm_configured:
-                cls.authenticate_ibm(api_token, instance)
-            
-            # Add the specific device
-            cls.add_ibm_device(device, alias)
-            return alias
-            
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize IBM backend '{device}' as '{alias}': {e}") from e
-
-    @classmethod
-    def init_quantinuum(
-        cls, 
-        device: str, 
-        alias: Optional[str] = None,
-        token_store: Optional[CredentialStorage] = None,
-        provider: Optional[str] = None,
-    ) -> str:
-        """
-        One-step Quantinuum backend initialization: authenticate + add device.
-        
-        Args:
-            device: Quantinuum device name (e.g., "H1-1", "H2-2E")
-            alias: Optional alias for the device (defaults to device name)
-            token_store: Where to save auth tokens (defaults to in-memory)
-            provider:
-            
-        Returns:
-            str: The alias used for the registered backend
-            
-        Raises:
-            ValueError: If alias already exists
-            RuntimeError: If authentication or device addition fails
-        """
-        alias = alias or device
-        
-        # Check for existing alias
-        if alias in cls._backends:
-            raise ValueError(f"Backend alias '{alias}' already exists. Available: {list(cls._backends.keys())}")
-        
-        try:
-            # Authenticate if needed
-            if not cls._quantinuum_configured:
-                cls.authenticate_quantinuum(token_store, provider)
-            
-            # Add the specific device
-            cls.add_quantinuum_device(device, alias, token_store, provider)
-            return alias
-            
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize Quantinuum backend '{device}' as '{alias}': {e}") from e
-
-    @classmethod
-    def validate_alias(cls, alias: str) -> None:
-        """
-        Validate that an alias exists in the registry.
-        
-        Args:
-            alias: Backend alias to validate
-            
-        Raises:
-            ValueError: If alias not found (with helpful message)
-        """
-        # This is just a wrapper around get() for explicit validation
-        cls.get(alias)  # Will raise ValueError if not found
+                backends[alias] = f"Error: {e}"
+        return backends
     
-    @classmethod
-    def count(cls) -> int:
-        """
-        Return the number of registered backends.
+    def aliases(self) -> List[str]:
+        """List all backend aliases (same as all()).
         
         Returns:
-            int: Number of registered backends
+            List[str]: List of all registered backend aliases.
         """
-        return len(cls._backends)
+        return self.all()
+    
+    def clear(self) -> None:
+        """Clear all backends from all providers."""
+        for provider in self._providers.values():
+            provider.clear_backends()
+        self._backend_to_provider.clear()
+    
+    def is_registered(self, alias: str) -> bool:
+        """Check if a backend alias is registered.
+        
+        Args:
+            alias (str): The alias to check.
+            
+        Returns:
+            bool: True if the alias is registered, False otherwise.
+        """
+        return alias in self._backend_to_provider
+    
+    def info(self) -> Dict[str, Dict[str, Any]]:
+        """Get info about all backends across all providers.
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: Dictionary mapping alias to backend info.
+        """
+        info = {}
+        for provider in self._providers.values():
+            info.update(provider.backend_info())
+        return info
+    
+    def count(self) -> int:
+        """Count total backends across all providers.
+        
+        Returns:
+            int: Total number of registered backends.
+        """
+        return len(self._backend_to_provider)
+    
+    # Provider-specific convenience methods
+    def authenticate_ibm(self, **kwargs) -> List[str]:
+        """Authenticate with IBM provider.
+        
+        Args:
+            **kwargs: Arguments passed to IBM provider's authenticate method.
+            
+        Returns:
+            List[str]: List of available IBM devices.
+        """
+        return self.get_provider("ibm").authenticate(**kwargs)
+    
+    def authenticate_quantinuum(self, **kwargs) -> List[str]:
+        """Authenticate with Quantinuum provider.
+        
+        Args:
+            **kwargs: Arguments passed to Quantinuum provider's authenticate method.
+            
+        Returns:
+            List[str]: List of available Quantinuum devices.
+        """
+        return self.get_provider("quantinuum").authenticate(**kwargs)
+    
+    def list_available_ibm_devices(self, **kwargs) -> List[str]:
+        """List available IBM devices.
+        
+        Returns:
+            List[str]: List of available IBM device names.
+        """
+        return self.get_provider("ibm").list_available_devices(**kwargs)
+    
+    def list_available_quantinuum_devices(self, **kwargs) -> List[str]:
+        """List available Quantinuum devices.
+        
+        Returns:
+            List[str]: List of available Quantinuum device names.
+        """
+        return self.get_provider("quantinuum").list_available_devices(**kwargs)
+    
+    def add_ibm_device(self, device: str, alias: Optional[str] = None, **kwargs) -> Any:
+        """Add an IBM device backend.
+        
+        Args:
+            device (str): IBM device name (e.g., 'ibm_brisbane').
+            alias (Optional[str]): Custom alias for the device.
+            **kwargs: Additional arguments passed to IBM provider.
+            
+        Returns:
+            Any: The created IBM backend instance.
+        """
+        alias = alias or device
+        backend = self.add_backend("ibm", device, alias, **kwargs)
+        return backend
+    
+    def add_quantinuum_device(self, device: str, alias: Optional[str] = None, **kwargs) -> Any:
+        """Add a Quantinuum device backend.
+        
+        Args:
+            device (str): Quantinuum device name (e.g., 'H1-1').
+            alias (Optional[str]): Custom alias for the device.
+            **kwargs: Additional arguments passed to Quantinuum provider.
+            
+        Returns:
+            Any: The created Quantinuum backend instance.
+        """
+        alias = alias or device
+        backend = self.add_backend("quantinuum", device, alias, **kwargs)
+        return backend
+    
+    def init_ibm(self, device: str, alias: Optional[str] = None, **kwargs) -> str:
+        """Initialize IBM backend in one step (authenticate + add device).
+        
+        Args:
+            device (str): IBM device name.
+            alias (Optional[str]): Custom alias for the device.
+            **kwargs: Arguments for authentication (api_token, instance) and device setup.
+            
+        Returns:
+            str: The alias used for the backend.
+        """
+        provider = self.get_provider("ibm")
+        alias = provider.init_device(device=device, alias=alias, **kwargs)
+        self._backend_to_provider[alias] = "ibm"
+        return alias
+    
+    def init_quantinuum(self, device: str, alias: Optional[str] = None, **kwargs) -> str:
+        """Initialize Quantinuum backend in one step (authenticate + add device).
+        
+        Args:
+            device (str): Quantinuum device name.
+            alias (Optional[str]): Custom alias for the device.
+            **kwargs: Arguments for authentication (token_store, provider) and device setup.
+            
+        Returns:
+            str: The alias used for the backend.
+        """
+        provider = self.get_provider("quantinuum")
+        alias = provider.init_device(device=device, alias=alias, **kwargs)
+        self._backend_to_provider[alias] = "quantinuum"
+        return alias
+    
+    def list_available_devices(self, provider_name: str, **kwargs) -> List[str]:
+        """List available devices for a specific provider.
+        
+        Args:
+            provider_name (str): Name of the provider.
+            **kwargs: Additional arguments passed to the provider.
+            
+        Returns:
+            List[str]: List of available device names.
+        """
+        return self.get_provider(provider_name).list_available_devices(**kwargs)
+    
+    def validate_alias(self, alias: str) -> None:
+        """Validate that an alias is available for use.
+        
+        Args:
+            alias (str): The alias to validate.
+            
+        Raises:
+            ValueError: If the alias is already in use.
+        """
+        if self.is_registered(alias):
+            raise ValueError(f"Alias '{alias}' is already registered")
+    
+    def get_backend_sdk(self, alias: str) -> str:
+        """Get the SDK type for a given backend alias.
+        
+        Args:
+            alias (str): The backend alias to check.
+            
+        Returns:
+            str: SDK name ("pytket", "qiskit", "braket")
+            
+        Raises:
+            ValueError: If the backend alias is not found.
+        """
+        if alias not in self._backend_to_provider:
+            raise ValueError(f"Backend '{alias}' not found")
+        
+        backend = self.get(alias)
+        
+        # Check for pytket backend characteristics
+        if hasattr(backend, 'get_compiled_circuit') and hasattr(backend, 'process_circuit'):
+            return "pytket"
+        
+        # Check for qiskit backend characteristics  
+        elif hasattr(backend, 'transpile') or 'qiskit' in str(type(backend)).lower():
+            return "qiskit"
+            
+        # Check for braket backend characteristics
+        elif hasattr(backend, 'run') and 'braket' in str(type(backend)).lower():
+            return "braket"
+            
+        else:
+            # Default to pytket for unknown backends
+            return "pytket"
+
+    # -----------------------------
+    # Singleton accessor (no API shadowing)
+    # -----------------------------
+    _singleton: Optional["BackendManager"] = None
+
+    @classmethod
+    def inst(cls) -> "BackendManager":
+        """Get or create the process-wide BackendManager instance.
+
+        Use this in call sites: BackendManager.inst().get(alias)
+        """
+        if cls._singleton is None:
+            cls._singleton = BackendManager()
+        return cls._singleton

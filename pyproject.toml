@@ -17,7 +17,9 @@ dependencies = [
     "pandas (>=2.3.0,<3.0.0)",
     "tqdm (>=4.67.1,<5.0.0)",
     "seaborn (>=0.13.2,<0.14.0)",
-    "pytket-quantinuum (>=0.52.0,<0.53.0)"
+    "pytket-quantinuum (>=0.52.0,<0.53.0)",
+    "amazon-braket-sdk (>=1.104.1,<2.0.0)",
+    "linkify-it-py (>=2.0.3,<3.0.0)"
 ]
 
 [tool.poetry]
@@ -32,6 +34,11 @@ pytest = "^8.4.1"
 mypy = "^1.16.1"
 pytest-cov = "^6.2.1"
 psutil = "^7.0.0"
+sphinx = "^7.2.0"
+myst-parser = "^2.0.0"
+furo = "^2024.8.6"
+sphinx-autodoc-typehints = "^2.0.0"
+sphinx-autobuild = "^2024.2.4"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

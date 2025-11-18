@@ -5,8 +5,23 @@ import hashlib
 from typing import List, Optional
 from sudoku_py import SudokuGenerator
 
+
 @dataclass
 class SudokuPuzzle:
+    """Represents a Sudoku puzzle with comprehensive manipulation capabilities.
+    
+    This class provides functionality for creating, validating, and analyzing Sudoku
+    puzzles. It supports both manual creation from existing boards and automatic
+    generation of new puzzles with specified difficulty levels.
+    
+    Attributes:
+        board (List[List[int]]): 2D list representing the Sudoku grid. Empty cells
+            are represented as 0 or None, filled cells contain integers 1-n.
+        subgrid_size (int): Size of each subgrid (e.g., 3 for a 9x9 puzzle).
+        board_size (int): Total size of the board (subgrid_size * subgrid_size).
+        num_missing_cells (int): Number of empty cells in the puzzle.
+        canonicalize (bool): Whether the puzzle is in canonical form.
+    """
     board: List[List[int]]
     subgrid_size: int
     board_size: int
@@ -15,15 +30,17 @@ class SudokuPuzzle:
 
     @classmethod
     def from_board(cls, board: List[List[int]], canonicalize: bool = False) -> "SudokuPuzzle":
-        """
-        Create a SudokuPuzzle instance from an existing board.
+        """Creates a SudokuPuzzle instance from an existing board.
 
         Args:
-            board (List[List[int]]): The Sudoku board.
-            canonicalize (bool): Whether to canonicalize the board.
+            board (List[List[int]]): A 2D list representing the Sudoku board.
+                Empty cells should be represented as 0 or None.
+            canonicalize (bool, optional): Whether to canonicalize the board to
+                ensure a standardized digit representation. Defaults to False.
 
         Returns:
-            SudokuPuzzle: A new SudokuPuzzle instance.
+            SudokuPuzzle: A new SudokuPuzzle instance with calculated properties
+                including subgrid size, board size, and missing cell count.
         """
         subgrid_size = int(math.isqrt(len(board)))
         board_size = subgrid_size * subgrid_size
@@ -42,16 +59,23 @@ class SudokuPuzzle:
 
     @classmethod
     def generate(cls, subgrid_size: int, num_missing_cells: int, canonicalize: bool = False) -> "SudokuPuzzle":
-        """
-        Generate a new Sudoku puzzle.
+        """Generates a new random Sudoku puzzle with specified parameters.
+
+        Creates a complete Sudoku puzzle and then removes the specified number
+        of cells to create the puzzle challenge. Uses the SudokuGenerator library
+        to ensure valid puzzle generation.
 
         Args:
-            subgrid_size (int): Size of the subgrid (e.g., 3 for 9x9 Sudoku).
-            num_missing_cells (int): Number of cells to remove.
-            canonicalize (bool): Whether to canonicalize the puzzle.
+            subgrid_size (int): Size of each subgrid (e.g., 3 for a 9x9 Sudoku).
+                The total board size will be subgrid_size².
+            num_missing_cells (int): Number of cells to remove from the complete
+                puzzle to create the challenge.
+            canonicalize (bool, optional): Whether to canonicalize the puzzle to
+                ensure standardized digit representation. Defaults to False.
 
         Returns:
-            SudokuPuzzle: A new SudokuPuzzle instance.
+            SudokuPuzzle: A new randomly generated SudokuPuzzle instance with
+                the specified difficulty level.
         """
         board_size = subgrid_size * subgrid_size
         generator = SudokuGenerator(board_size=board_size)
@@ -71,19 +95,24 @@ class SudokuPuzzle:
         )
 
     def plot(self, title: Optional[str] = None):
-        """
-        Plot the Sudoku grid using matplotlib.
+        """Creates a visual representation of the Sudoku puzzle using matplotlib.
         
-        Example usage:
-        puzzle = SudokuPuzzle.generate(subgrid_size=3, num_missing_cells=20)
-        fig = puzzle.plot(title="Sudoku Puzzle")
-        fig.savefig("sudoku_plot.png")  # Save the plot to a file
-
+        Generates a matplotlib figure showing the Sudoku grid with proper gridlines
+        and filled numbers. Major gridlines separate subgrids while minor gridlines
+        separate individual cells.
+        
         Args:
-            title (str, optional): Title for the plot.
+            title (str, optional): Title to display at the top of the plot.
+                If None, no title will be shown.
 
         Returns:
-            matplotlib.figure.Figure: The matplotlib Figure object for the plot.
+            matplotlib.figure.Figure: The matplotlib Figure object containing the
+                plot. This can be saved to a file or displayed.
+                
+        Example:
+            >>> puzzle = SudokuPuzzle.generate(subgrid_size=3, num_missing_cells=20)
+            >>> fig = puzzle.plot(title="My Sudoku Puzzle")
+            >>> fig.savefig("sudoku_plot.png")
         """
         import matplotlib.pyplot as plt
         
@@ -116,30 +145,43 @@ class SudokuPuzzle:
         return fig
     
     def get_hash(self) -> str:
-        """Generate a SHA-256 hash of the puzzle."""
+        """Generates a unique SHA-256 hash identifier for the puzzle.
+        
+        Creates a deterministic hash based on the current board state that can
+        be used for puzzle identification, caching, or comparison purposes.
+        
+        Returns:
+            str: A 64-character hexadecimal SHA-256 hash of the puzzle board.
+        """
         board_str = json.dumps(self.board)
         return hashlib.sha256(board_str.encode("utf-8")).hexdigest()
     
     @property
     def num_solutions(self) -> int:
-        """
-        Calculate and return the number of valid solutions for the puzzle.
+        """Calculates the total number of valid solutions for the puzzle.
 
-        This property uses the `_count_solutions` method to perform a backtracking
-        search and count all possible solutions.
+        Uses backtracking algorithm to exhaustively search all possible
+        completions of the puzzle and count valid solutions. This can be
+        computationally expensive for puzzles with many empty cells.
 
         Returns:
-            int: The number of valid solutions for the puzzle.
+            int: The number of valid complete solutions. Returns 1 for a
+                well-formed puzzle with a unique solution, 0 for unsolvable
+                puzzles, or >1 for puzzles with multiple solutions.
         """
         return self._count_solutions()
     
     @property
     def pre_tuples(self):
-        """
-        Find and return a list of preset (pre-filled) cell tuples.
+        """Returns all pre-filled (given) cells as coordinate tuples.
+        
+        Scans the board and identifies all cells that contain initial values
+        (non-zero, non-None values). These represent the clues provided with
+        the puzzle.
         
         Returns:
-            list: Tuples of the form (i, j, value) for pre-filled cells.
+            List[Tuple[int, int, int]]: List of tuples in the format (row, col, value)
+                for each pre-filled cell. Coordinates are 0-indexed.
         """
         preset_tuples = []
         for i in range(self.subgrid_size*self.subgrid_size):  # Loop over each row
@@ -151,11 +193,16 @@ class SudokuPuzzle:
 
     @property
     def open_tuples(self):
-        """
-        Find and return a list of open cell possibilities.
+        """Returns all valid digit possibilities for empty cells.
+        
+        For each empty cell, determines which digits (1 to board_size) can be
+        legally placed based on Sudoku constraints (no duplicates in rows,
+        columns, or subgrids).
         
         Returns:
-            list: Tuples of the form (i, j, digit) for each possible digit in each empty cell.
+            List[Tuple[int, int, int]]: List of tuples in the format (row, col, digit)
+                representing each valid digit placement possibility. Each empty
+                cell may contribute multiple tuples if multiple digits are valid.
         """
         open_tuples = []
         for i in range(self.subgrid_size*self.subgrid_size):  # Loop over each row
@@ -184,25 +231,28 @@ class SudokuPuzzle:
                         open_tuples.append((i, j, digit))
         return open_tuples
     
-    # The following functions are used to count the solutions of any given puzzle
     # ------------------------------------------------------------
+    # The following functions are used to count the solutions of any given puzzle
     def _set_cell(self, i, j, value):
-        """
-        Set the value of a cell in the puzzle board.
+        """Sets the value of a specific cell in the puzzle board.
         
         Args:
-            i (int): Row index.
-            j (int): Column index.
-            value (int): Value to set.
+            i (int): Zero-indexed row position.
+            j (int): Zero-indexed column position.
+            value (int): Value to place in the cell (typically 1 to board_size,
+                or 0 for empty).
         """
         self.board[i][j] = value
     
     def _is_correct(self):
-        """
-        Check if the current board is valid (no duplicate values in rows, columns, or subgrids).
+        """Validates the current board state against Sudoku constraints.
+        
+        Checks that no duplicate non-zero values exist in any row, column,
+        or subgrid. This validation works with partially filled boards.
         
         Returns:
-            bool: True if the board is valid, False otherwise.
+            bool: True if the current board state is valid according to
+                Sudoku rules, False if any constraint violations are found.
         """
         board = self.board
         size = self.board_size
@@ -238,11 +288,14 @@ class SudokuPuzzle:
         return True
     
     def _find_empty(self):
-        """
-        Find the next empty cell in the board.
+        """Locates the next empty cell in the board for backtracking.
+        
+        Scans the board row by row to find the first cell containing 0,
+        which represents an empty position.
         
         Returns:
-            tuple or None: (i, j) indices of the empty cell, or None if full.
+            Tuple[int, int] or None: Tuple of (row, col) indices for the first
+                empty cell found, or None if the board is completely filled.
         """
         board = self.board
         size = self.board_size
@@ -253,11 +306,16 @@ class SudokuPuzzle:
         return None
 
     def _count_solutions(self):
-        """
-        Recursively count all complete solutions for the puzzle using backtracking.
+        """Recursively counts all valid complete solutions using backtracking.
+        
+        Implements a depth-first search algorithm that tries all possible
+        digit placements in empty cells and counts how many lead to valid
+        complete solutions. Uses backtracking to efficiently explore the
+        solution space.
         
         Returns:
-            int: Number of complete solutions.
+            int: Total number of valid complete solutions found. A well-formed
+                Sudoku puzzle should return 1 for a unique solution.
         """
         empty = self._find_empty()
         if not empty:
@@ -274,33 +332,28 @@ class SudokuPuzzle:
                 count += self._count_solutions()
             self._set_cell(i, j, 0)  # Backtrack
         return count
+    # ------------------------------------------------------------
     
     @staticmethod
     def _canonicalize(matrix: list[list[int]]) -> list[list[int]]:
-        """Relabels digits in a Sudoku matrix to ensure canonical form up to permutation.
+        """Converts a Sudoku matrix to canonical form with sequential digit labeling.
         
-        The function creates a standardized representation of a Sudoku puzzle by relabeling
-        the non-zero digits sequentially as they appear, while preserving the relative
-        relationships between numbers. This ensures that puzzles that are equivalent up to
-        digit permutation will have the same canonical form.
+        Creates a standardized representation by relabeling non-zero digits
+        sequentially (1, 2, 3, ...) based on their first appearance when scanning
+        left-to-right, top-to-bottom. This ensures that puzzles equivalent up to
+        digit permutation will have identical canonical representations.
         
         Args:
-            matrix (list[list[int]]): A nxn Sudoku matrix where 0 represents empty cells
-                and 1-n represent filled cells.
+            matrix (List[List[int]]): A square Sudoku matrix where 0 represents
+                empty cells and positive integers represent filled cells.
         
         Returns:
-            list[list[int]]: A canonicalized version of the input matrix where numbers are
-                relabeled according to their first appearance.
+            List[List[int]]: Canonicalized matrix with digits relabeled sequentially.
+                Empty cells (0) are preserved unchanged.
         
         Example:
-            Input matrix with numbers [2,5,7] would be canonicalized to [1,2,3]
-            maintaining their relative positions but using sequential numbering.
-            
-        Args:
-            matrix (list of list of int): Sudoku board matrix.
-        
-        Returns:
-            list of list of int: Canonicalized board matrix.
+            A matrix with digits [2, 5, 7] appearing in that order would be
+            canonicalized to [1, 2, 3], maintaining all structural relationships.
         """
         mapping = {}  # Maps original numbers to their canonical form
         current = 1   # Next available canonical number
