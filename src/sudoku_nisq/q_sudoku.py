@@ -8,7 +8,6 @@ from sudoku_nisq.backends import BackendManager
 
 if TYPE_CHECKING:
     from sudoku_nisq.quantum_solver import QuantumSolver
-    from pytket.extensions.quantinuum.backends.credential_storage import CredentialStorage
 
 class QSudoku():
     """High-level interface for quantum Sudoku solving with integrated backend management.

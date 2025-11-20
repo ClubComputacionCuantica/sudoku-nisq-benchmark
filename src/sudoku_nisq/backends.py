@@ -1,7 +1,6 @@
 """Unified manager for quantum computing backends across multiple providers."""
 
 from typing import Any, Dict, List, Optional
-from pytket.extensions.quantinuum.backends.credential_storage import CredentialStorage
 from .providers import QuantumProvider, IBMProvider, QuantinuumProvider
 
 

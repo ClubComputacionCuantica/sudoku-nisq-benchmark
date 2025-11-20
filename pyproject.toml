@@ -19,7 +19,8 @@ dependencies = [
     "seaborn (>=0.13.2,<0.14.0)",
     "pytket-quantinuum (>=0.52.0,<0.53.0)",
     "amazon-braket-sdk (>=1.104.1,<2.0.0)",
-    "linkify-it-py (>=2.0.3,<3.0.0)"
+    "linkify-it-py (>=2.0.3,<3.0.0)",
+    "boto3 (>=1.41.0,<2.0.0)"
 ]
 
 [tool.poetry]
