@@ -1,6 +1,6 @@
 """IBM Quantum provider implementation."""
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from pytket.extensions.qiskit import IBMQBackend, set_ibmq_config
 from qiskit_ibm_runtime import QiskitRuntimeService
 from .base import QuantumProvider
@@ -18,39 +18,38 @@ class IBMProvider(QuantumProvider):
         """IBM Quantum uses Qiskit SDK."""
         return "qiskit"
     
-    def authenticate(
-        self,
-        api_token: str,
-        instance: Optional[str] = None,
-        overwrite: bool = False,
-        **kwargs
-    ) -> List[str]:
-        """Configure IBM Quantum credentials and discover available devices.
-        
-        Args:
-            api_token (str): Your IBM Quantum Platform API token.
-            instance (Optional[str]): Your IBM Quantum instance CRN.
-            overwrite (bool): If True, forces re-authentication even if already configured.
-                
-        Returns:
-            List[str]: List of available quantum device names for your account.
-            
+    def authenticate(self, **kwargs: Any) -> List[str]:
+        """Authenticate with IBM Quantum and return available devices.
+
+        Accepts provider-specific parameters via **kwargs to keep signature
+        compatible with abstract base class.
+
+        Expected kwargs:
+            api_token (str): IBM Quantum Platform API token (required)
+            instance (str | None): IBM Quantum instance CRN (optional)
+            overwrite (bool): Force re-authentication if already configured
+
         Raises:
-            RuntimeError: If authentication fails or credentials are invalid.
+            ValueError: If required parameters are missing.
         """
+        api_token = kwargs.get("api_token")
+        if not api_token:
+            raise ValueError("'api_token' is required for IBM authentication")
+        instance = kwargs.get("instance")
+        overwrite = bool(kwargs.get("overwrite", False))
+
         if self._configured and not overwrite:
             print("IBM provider already configured. Use overwrite=True to reconfigure.")
             return self.list_available_devices()
-            
+
         set_ibmq_config(ibmq_api_token=api_token, instance=instance)
         self._configured = True
-        
-        # List and return available devices after successful authentication
+
         try:
             QiskitRuntimeService.save_account(
-                channel="ibm_quantum_platform", 
-                token=api_token, 
-                instance=instance, 
+                channel="ibm_quantum_platform",
+                token=api_token,
+                instance=instance,
                 overwrite=True
             )
             print("IBM authentication successful")
@@ -116,28 +115,14 @@ class IBMProvider(QuantumProvider):
         self._backends[name] = backend
         return backend
     
-    def init_device(
-        self,
-        api_token: str,
-        instance: str,
-        device: str,
-        alias: Optional[str] = None,
-        **kwargs
-    ) -> str:
-        """Initialize IBM device in one step (authenticate + add device).
-        
-        Args:
-            api_token (str): Your IBM Quantum Platform API token.
-            instance (str): Your IBM Quantum instance CRN.
-            device (str): IBM Quantum device name.
-            alias (Optional[str]): Custom alias for the device.
-            
-        Returns:
-            str: The alias used for the backend.
+    def init_device(self, device: str, alias: Optional[str] = None, **kwargs: Any) -> str:
+        """Initialize IBM device (authenticate if needed) and return alias.
+
+        Expects api_token / instance in kwargs. Keeps signature uniform with
+        QuantumProvider base class for mypy compatibility.
         """
         if not self._configured:
-            self.authenticate(api_token=api_token, instance=instance)
-        
+            self.authenticate(**kwargs)
         alias = alias or device
         self.add_device(device, alias)
         return alias

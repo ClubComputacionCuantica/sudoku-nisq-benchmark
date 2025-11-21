@@ -1,3 +1,4 @@
+from typing import Any
 from pytket import Circuit
 from sudoku_nisq.quantum_solver import QuantumSolver
 
@@ -77,26 +78,15 @@ class BacktrackingQuantumSolver(QuantumSolver):
             **kwargs
         )
 
-    def _build_circuit(self) -> Circuit:
-        """Build the quantum circuit implementing the backtracking algorithm.
-        
-        Constructs a quantum circuit that encodes the backtracking algorithm for
-        Sudoku solving. The circuit should implement quantum operations that
-        systematically explore the solution space with quantum superposition
-        and interference.
-        
-        Returns:
-            Circuit: A pytket Circuit object containing the quantum backtracking
-                algorithm. Currently returns an empty circuit.
-                
-        Note:
-            This is a placeholder method.
-            
-        Todo:
-            - Implement full circuit logic
+    def _build_sdk_circuit(self, sdk_type: str) -> Any:
+        """Build the quantum circuit implementing the backtracking algorithm for a given SDK.
+
+        Currently returns an empty pytket Circuit regardless of SDK while the
+        algorithm implementation is pending. For non-pytket SDKs, conversion
+        logic would be added here later.
         """
-        circuit = Circuit()
-        return circuit
+        # Placeholder: always build a pytket circuit
+        return Circuit()
     
     def resource_estimation(self):
         """Estimate quantum resources required for the backtracking algorithm.

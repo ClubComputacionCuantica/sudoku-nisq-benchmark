@@ -29,8 +29,13 @@ class QuantumProvider(ABC):
         pass
     
     @abstractmethod
-    def authenticate(self, **kwargs) -> List[str]:
-        """Authenticate with the provider and return available devices."""
+    def authenticate(self, **kwargs: Any) -> List[str]:
+        """Authenticate with the provider and return available devices.
+
+        Subclasses should accept provider-specific parameters via **kwargs.
+        Required parameters must be validated internally and raise a
+        descriptive error if missing.
+        """
         pass
     
     @abstractmethod
@@ -41,6 +46,15 @@ class QuantumProvider(ABC):
     @abstractmethod
     def add_device(self, device: str, alias: Optional[str] = None, **kwargs) -> Any:
         """Add a device backend to the provider's registry."""
+        pass
+
+    @abstractmethod
+    def init_device(self, device: str, alias: Optional[str] = None, **kwargs: Any) -> str:
+        """Initialize device (authenticate if needed + add device) and return alias.
+
+        Unified interface so BackendManager can call provider.init_device(...)
+        without needing provider-type specific casts.
+        """
         pass
     
     def get_backend(self, alias: str) -> Any:

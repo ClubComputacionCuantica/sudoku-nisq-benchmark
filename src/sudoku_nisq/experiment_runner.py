@@ -123,7 +123,7 @@ class ExperimentRunner:
         """Validate that all requested backends are properly registered."""
         for alias in self.backends:
             try:
-                BackendManager.validate_alias(alias)
+                BackendManager.inst().validate_alias(alias)
             except ValueError as e:
                 raise ValueError(f"Backend validation failed for '{alias}': {e}") from e
                 
@@ -169,7 +169,7 @@ class ExperimentRunner:
             Tuple of (transpilation_result, elapsed_seconds)
         """
         # Get backend directly from global registry (no need to attach to QSudoku)
-        backend = BackendManager.get(backend_alias)
+        backend = BackendManager.inst().get(backend_alias)
         
         # Ensure we don't accidentally trigger any circuit building during transpilation
         start_time = time.time()
