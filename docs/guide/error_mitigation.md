@@ -172,11 +172,6 @@ Backend types usable through this bridge (pytket interface):
 - Quantinuum (native pytket)
 - Aer simulator (pytket-qiskit)
 
-Braket note:
-- A native exact cover Grover circuit builder now exists (`braket_impl`), but mitigation wrappers still operate via the pytket/Qiskit path. Integrating Braket directly into mitigation (folding/execution without conversion) is planned.
-  
-Other providers needing non-pytket native circuits remain pending.
-
 ---
 
 ## Limitations
@@ -206,7 +201,6 @@ Use PEC:
 ## Future TODOs (Tracked in Code)
 
 - Auto selection of scale factors / factories.
-- Direct Braket mitigation integration (skip pytket/Qiskit conversion).
 - Public validator injection instead of private attribute access.
 - Combined mitigation pipeline.
 - Cache conversions for repeated executes.
