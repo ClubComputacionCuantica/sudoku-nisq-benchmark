@@ -13,6 +13,35 @@ except ImportError as e:  # pragma: no cover - raised if user lacks qiskit
 
 
 # ---------------------------------------------------------------------------
+# Gate Counter
+# ---------------------------------------------------------------------------
+
+class GateCounter:
+    """Tracks gate counts during circuit construction.
+    
+    Uses clear naming convention:
+    - Single qubit: H, X, Measure
+    - Multi-controlled X: CX (1 control), CCX (2 controls), C3X (3 controls), etc.
+    - Multi-controlled Z: CZ (1 control), CCZ (2 controls), C3Z (3 controls), etc.
+    """
+    
+    def __init__(self):
+        self.counts = {}
+    
+    def increment(self, gate_name: str, count: int = 1):
+        """Increment the count for a specific gate type."""
+        self.counts[gate_name] = self.counts.get(gate_name, 0) + count
+    
+    def add_counter(self, other: 'GateCounter', multiplier: int = 1):
+        """Add counts from another counter, optionally multiplied."""
+        for gate_name, count in other.counts.items():
+            self.increment(gate_name, count * multiplier)
+    
+    def to_dict(self) -> dict:
+        """Return the gate counts as a dictionary."""
+        return self.counts.copy()
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -43,7 +72,7 @@ def _compute_grover_iterations(solver) -> int:
 # Subcircuit builders (native Qiskit)
 # ---------------------------------------------------------------------------
 
-def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRegister]) -> QuantumCircuit:
+def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRegister], counter: GateCounter = None) -> QuantumCircuit:
     """Build the counting subcircuit.
 
     Reproduces the cascaded multi-controlled-X construction from the deprecated
@@ -51,6 +80,9 @@ def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRe
     that subset, we build growing control lists over the bits of register U_i.
 
     Qubit order in the returned circuit: [S..., U_0..., U_1..., ..., U_{u-1}...]
+    
+    Args:
+        counter: Optional GateCounter to track gate usage
     """
     count = QuantumCircuit(S_reg, *U_regs, name="COUNT")
 
@@ -76,34 +108,64 @@ def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRe
         for q_list in per_subset:
             if len(q_list) == 1:  # single target, no controls
                 count.x(q_list[0])
+                if counter is not None:
+                    counter.increment("X")
             else:
                 count.mcx(q_list[:-1], q_list[-1])  # controls, target
+                if counter is not None:
+                    n_controls = len(q_list) - 1
+                    if n_controls == 1:
+                        counter.increment("CX")
+                    elif n_controls == 2:
+                        counter.increment("CCX")
+                    else:
+                        counter.increment(f"C{n_controls}X")
 
     return count
 
 
-def _build_oracle_qiskit(U_regs: list[QuantumRegister], anc_reg: QuantumRegister) -> QuantumCircuit:
+def _build_oracle_qiskit(U_regs: list[QuantumRegister], anc_reg: QuantumRegister, counter: GateCounter = None) -> QuantumCircuit:
     """Build the oracle subcircuit.
 
     Flips all U register qubits except index 0, performs a big MCX onto ancilla,
     then uncomputes the flips. Order: [U_0..., U_1..., ..., anc]
+    
+    Args:
+        counter: Optional GateCounter to track gate usage
     """
     oracle = QuantumCircuit(*U_regs, anc_reg, name="ORACLE")
 
     # Flip all non-zero index bits in each U_i register
+    x_count = 0
     for reg in U_regs:
         for bit_index, q in enumerate(reg):
             if bit_index != 0:
                 oracle.x(q)
+                x_count += 1
+    
+    if counter is not None:
+        counter.increment("X", x_count)
 
     controls = _flatten_registers(U_regs)
     target = anc_reg[0]
     if controls:  # typical case
         oracle.mcx(controls, target)
+        if counter is not None:
+            n_controls = len(controls)
+            if n_controls == 1:
+                counter.increment("CX")
+            elif n_controls == 2:
+                counter.increment("CCX")
+            else:
+                counter.increment(f"C{n_controls}X")
     else:  # degenerate edge case: no controls (empty universe)
         oracle.x(target)
+        if counter is not None:
+            counter.increment("X")
 
     # Uncompute flips
+    if counter is not None:
+        counter.increment("X", x_count)
     for reg in U_regs:
         for bit_index, q in enumerate(reg):
             if bit_index != 0:
@@ -112,13 +174,21 @@ def _build_oracle_qiskit(U_regs: list[QuantumRegister], anc_reg: QuantumRegister
     return oracle
 
 
-def _build_diffuser_qiskit(S_reg: QuantumRegister) -> QuantumCircuit:
-    """Standard Grover diffuser on subset register S."""
+def _build_diffuser_qiskit(S_reg: QuantumRegister, counter: GateCounter = None) -> QuantumCircuit:
+    """Standard Grover diffuser on subset register S.
+    
+    Args:
+        counter: Optional GateCounter to track gate usage
+    """
     diff = QuantumCircuit(S_reg, name="DIFFUSER")
 
     for q in S_reg:
         diff.h(q)
         diff.x(q)
+    
+    if counter is not None:
+        counter.increment("H", len(S_reg))
+        counter.increment("X", len(S_reg))
 
     # Multi-controlled Z via H-mapped MCX if more than one qubit
     if len(S_reg) == 0:
@@ -127,14 +197,30 @@ def _build_diffuser_qiskit(S_reg: QuantumRegister) -> QuantumCircuit:
         diff.h(S_reg[0])
         diff.z(S_reg[0])
         diff.h(S_reg[0])
+        if counter is not None:
+            counter.increment("H", 2)
+            counter.increment("Z")
     else:
         diff.h(S_reg[-1])
         diff.mcx(S_reg[:-1], S_reg[-1])  # implements C^(n-1)Z
         diff.h(S_reg[-1])
+        if counter is not None:
+            counter.increment("H", 2)
+            n_controls = len(S_reg) - 1
+            if n_controls == 1:
+                counter.increment("CX")
+            elif n_controls == 2:
+                counter.increment("CCX")
+            else:
+                counter.increment(f"C{n_controls}X")
 
     for q in S_reg:
         diff.x(q)
         diff.h(q)
+    
+    if counter is not None:
+        counter.increment("X", len(S_reg))
+        counter.increment("H", len(S_reg))
 
     return diff
 
@@ -149,7 +235,14 @@ def build_exact_cover_circuit(solver):
     The solver must provide: s_size, u_size, b, subsets (dict-like), universe (list),
     and num_solutions. Measurements are added onto a classical register `c` of size
     s_size for sampling subset selections that solve the exact cover.
+    
+    Returns:
+        tuple: (circuit, gate_counts_dict) where gate_counts_dict contains
+               the count of each fundamental gate type used.
     """
+    # Initialize gate counter
+    counter = GateCounter()
+    
     # Registers
     S = QuantumRegister(solver.s_size, "S")
     U_regs = [QuantumRegister(solver.b, f"U_{i}") for i in range(solver.u_size)]
@@ -161,20 +254,26 @@ def build_exact_cover_circuit(solver):
     # Superposition over subsets
     for q in S:
         main.h(q)
+        counter.increment("H")
 
     # Prepare ancilla in |-> state
     main.x(anc[0])
+    counter.increment("X")
     main.h(anc[0])
+    counter.increment("H")
 
-    # Build subcircuits
-    count_circ = _build_counter_qiskit(solver, S, U_regs)
+    # Build subcircuits with gate counting
+    count_counter = GateCounter()
+    count_circ = _build_counter_qiskit(solver, S, U_regs, count_counter)
     count_gate = count_circ.to_gate(label="COUNT")
     count_inv_gate = count_gate.inverse()
 
-    oracle_circ = _build_oracle_qiskit(U_regs, anc)
+    oracle_counter = GateCounter()
+    oracle_circ = _build_oracle_qiskit(U_regs, anc, oracle_counter)
     oracle_gate = oracle_circ.to_gate(label="ORACLE")
 
-    diffuser_circ = _build_diffuser_qiskit(S)
+    diffuser_counter = GateCounter()
+    diffuser_circ = _build_diffuser_qiskit(S, diffuser_counter)
     diffuser_gate = diffuser_circ.to_gate(label="DIFFUSER")
 
     # Determine Grover iterations
@@ -196,8 +295,15 @@ def build_exact_cover_circuit(solver):
         main.append(oracle_gate, oracle_order)
         main.append(count_inv_gate, count_order)
         main.append(diffuser_gate, S_list)
+    
+    # Aggregate gate counts: COUNT + ORACLE + COUNT† + DIFFUSER per iteration
+    counter.add_counter(count_counter, multiplier=num_iterations)  # COUNT
+    counter.add_counter(oracle_counter, multiplier=num_iterations)  # ORACLE
+    counter.add_counter(count_counter, multiplier=num_iterations)  # COUNT† (same gates)
+    counter.add_counter(diffuser_counter, multiplier=num_iterations)  # DIFFUSER
 
     # Measure subset register
     main.measure(S, c_bits)
+    counter.increment("Measure", len(S))
 
-    return main
+    return main, counter.to_dict()

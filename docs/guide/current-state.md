@@ -15,8 +15,8 @@ This page summarizes what’s implemented today, what’s stable, and what’s p
 - Circuits (how to solve)
   - Exact cover circuit builders:
     - PyTKET: `sudoku_nisq.circuits.exact_cover.pytket_impl` (primary)
-    - Qiskit: `sudoku_nisq.circuits.exact_cover.qiskit_impl` (native implementation)
-    - Braket: TODO (native); currently falls back to PyTKET conversion in some paths.
+    - Qiskit: `sudoku_nisq.circuits.exact_cover.qiskit_impl` (native)
+    - Braket: `sudoku_nisq.circuits.exact_cover.braket_impl` (native Grover builder; transpilation remains server-side)
 - Providers/Backends (where to run)
   - Provider abstraction under `sudoku_nisq.providers`.
   - IBM and Quantinuum implementations present; auth + device registration handled there.
@@ -52,7 +52,7 @@ Current production‑ready execution is limited to IBM via PyTKET. Other entries
 - SDKs
   - PyTKET: supported (primary build/execution path)
   - Qiskit: supported natively for exact cover circuits
-  - Braket: TODO (native) – falls back or is unimplemented
+  - Braket: native circuit construction implemented; transpilation handled by service (no client pre-transpile)
 - Providers
   - IBM: tested and functional
   - Quantinuum: placeholder; authentication/circuit paths under active development
@@ -64,7 +64,7 @@ Depth values in analytical resource estimation may be `None` when not computed (
 
 - Tests: Some failures around `BackendManager.clear()` being called without an instance; a classmethod wrapper is planned.
 - Notebooks: Some cells still import from removed root paths; update to `from sudoku_nisq import ExactCoverQuantumSolver`.
-- Braket: Native exact cover circuit builder to be implemented.
+- Braket: Native exact cover circuit builder implemented; add mitigation integration & resource extraction post-task result.
 - Docs: Linkcode (source links) and Intersphinx to be enabled with repo/tag mapping.
 
 ## Roadmap (short)

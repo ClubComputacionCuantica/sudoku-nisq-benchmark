@@ -3,7 +3,7 @@
 This project is distributed as a Python package and built with Poetry. You can install it in two common ways.
 
 ## Prerequisites
-- Python 3.10+ (see `pyproject.toml` for the exact supported range)
+- Python 3.11–3.12 (see `pyproject.toml` for the exact supported range)
 - Windows, macOS, or Linux
 - Optional: Poetry (recommended for dev workflow)
 
@@ -33,7 +33,7 @@ poetry run sphinx-build -b html docs docs/_build/html
 ## Optional provider SDKs
 Some features require vendor SDKs which are mocked during docs build:
 - IBM: `qiskit`, `qiskit-ibm-runtime`
-- Quantinuum (TKET): `pytket`, `pytket-extensions-quantinuum`
+- Quantinuum (TKET): `pytket`, `pytket-quantinuum`
 - AWS Braket: `amazon-braket-sdk`
 
 Install only what you need for your workflow.

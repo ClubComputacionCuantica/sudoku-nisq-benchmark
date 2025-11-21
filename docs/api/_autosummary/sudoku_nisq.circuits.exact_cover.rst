@@ -1,4 +1,4 @@
-sudoku\_nisq.circuits.exact\_cover
+﻿sudoku\_nisq.circuits.exact\_cover
 ==================================
 
 .. automodule:: sudoku_nisq.circuits.exact_cover
@@ -10,5 +10,6 @@ sudoku\_nisq.circuits.exact\_cover
    :toctree:
    :recursive:
 
+   braket_impl
    pytket_impl
    qiskit_impl

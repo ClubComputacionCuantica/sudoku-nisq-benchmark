@@ -21,13 +21,13 @@ class IBMProvider(QuantumProvider):
     def authenticate(self, **kwargs: Any) -> List[str]:
         """Authenticate with IBM Quantum and return available devices.
 
-        Accepts provider-specific parameters via **kwargs to keep signature
-        compatible with abstract base class.
+        Accepts provider-specific parameters via ``**kwargs`` to keep the
+        signature compatible with the abstract base class.
 
-        Expected kwargs:
-            api_token (str): IBM Quantum Platform API token (required)
-            instance (str | None): IBM Quantum instance CRN (optional)
-            overwrite (bool): Force re-authentication if already configured
+        Expected keyword arguments (in ``kwargs``):
+            api_token (str): IBM Quantum Platform API token (required).
+            instance (str | None): IBM Quantum instance CRN (optional).
+            overwrite (bool): Force re-authentication if already configured.
 
         Raises:
             ValueError: If required parameters are missing.

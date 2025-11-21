@@ -66,9 +66,9 @@ mitigated_prob = apply_zne(
     backend=backend,
     solver=solver,
     shots=4096,
-    # Optional (currently passthrough, defaults used if None):
-    scale_noise=None,
-    factory=None,
+    # Optional mitigation knobs (forwarded to Mitiq):
+    scale_noise=None,  # e.g. fold_gates_at_random
+    factory=None,      # e.g. RichardsonFactory(scale_factors=[1,3,5])
 )
 ```
 
@@ -106,25 +106,50 @@ Representations must be constructed externally (TODO: auto-generation). Executor
 
 ---
 
-## Executor (Consistent with Code)
+## Executor (Updated Signature & Safety)
 
 ```python
-def create_zne_executor(backend, solver, shots=1024, **kwargs):
+def create_zne_executor(
+    backend,
+    solver,
+    shots: int = 1024,
+    scale_noise=None,
+    factory=None,
+    **kwargs,
+):
     def executor(circuit):
         from pytket import Circuit
         if not isinstance(circuit, Circuit):
-            from qiskit import QuantumCircuit
-            if isinstance(circuit, QuantumCircuit):
+            try:
                 from pytket.extensions.qiskit import qiskit_to_tk
+                from qiskit import QuantumCircuit
+            except ImportError as exc:
+                raise ImportError(
+                    "pytket-qiskit extension and qiskit are required for Qiskit→pytket conversion."
+                ) from exc
+            if isinstance(circuit, QuantumCircuit):
                 circuit = qiskit_to_tk(circuit)
             else:
-                raise TypeError(f"Unsupported circuit type: {type(circuit)}")
+                raise TypeError(
+                    f"Unsupported circuit type from Mitiq: {type(circuit)}. "
+                    "Only pytket.Circuit and qiskit.QuantumCircuit are supported."
+                )
+
+        validator = getattr(solver, "_is_valid_solution", None)
+        if not callable(validator):
+            raise AttributeError("Solver missing '_is_valid_solution' validator.")
+
         handle = backend.process_circuit(circuit, n_shots=shots, **kwargs)
         result = backend.get_result(handle)
         counts = result.get_counts()
-        return compute_success_expectation(counts, solver._is_valid_solution)
+        return compute_success_expectation(counts, validator)
     return executor
 ```
+
+Notes:
+- `scale_noise` & `factory` are consumed by `apply_zne`, not inside the executor.
+- Fail-fast conversion prevents silent backend misuse.
+- Validator access will be replaced by a public parameter in future.
 
 ---
 
@@ -147,9 +172,10 @@ Backend types usable through this bridge (pytket interface):
 - Quantinuum (native pytket)
 - Aer simulator (pytket-qiskit)
 
-Not yet integrated:
-- AWS Braket: requires Qiskit ↔ Braket or direct Braket circuit path (TODO).
-- Other providers needing non-pytket native circuits.
+Braket note:
+- A native exact cover Grover circuit builder now exists (`braket_impl`), but mitigation wrappers still operate via the pytket/Qiskit path. Integrating Braket directly into mitigation (folding/execution without conversion) is planned.
+  
+Other providers needing non-pytket native circuits remain pending.
 
 ---
 
@@ -180,7 +206,7 @@ Use PEC:
 ## Future TODOs (Tracked in Code)
 
 - Auto selection of scale factors / factories.
-- Braket support (conversion layer).
+- Direct Braket mitigation integration (skip pytket/Qiskit conversion).
 - Public validator injection instead of private attribute access.
 - Combined mitigation pipeline.
 - Cache conversions for repeated executes.

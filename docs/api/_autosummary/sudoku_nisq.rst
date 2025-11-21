@@ -17,9 +17,11 @@
    experiment_runner
    graph_coloring_solver
    metadata_manager
+   mitigation
    providers
    q_sudoku
    quantum_solver
    solvers
    sudoku_pattern_generation
    sudoku_puzzle
+   utils

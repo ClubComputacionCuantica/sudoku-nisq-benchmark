@@ -23,7 +23,7 @@ _GITHUB_BRANCH = os.environ.get("DOCS_GIT_REF", "dev")  # switch to main/release
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 project = 'Sudoku NISQ Benchmark'
-author = 'Rob  Navarro'
+author = 'Club de Computacion Cuantica'
 year = datetime.now().year
 copyright = f"{year}, {author}"
 

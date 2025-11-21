@@ -138,6 +138,48 @@ class QuantumSolver(ABC):
         """
         pass
     
+    @abstractmethod
+    def _transpile_pytket(self, backend: Any, opt_level: int) -> Circuit:
+        """Transpile circuit using PyTKET backend.
+        
+        Args:
+            backend: PyTKET backend instance with get_compiled_circuit method
+            opt_level: Optimization level for transpilation (0-2 typically)
+            
+        Returns:
+            Circuit: Transpiled circuit in PyTKET format
+        """
+        pass
+    
+    @abstractmethod
+    def _transpile_qiskit(self, backend: Any, opt_level: int) -> Any:
+        """Transpile circuit using Qiskit native transpiler.
+        
+        Args:
+            backend: Qiskit backend instance
+            opt_level: Optimization level for transpilation (0-3 typically)
+            
+        Returns:
+            QuantumCircuit: Transpiled circuit in Qiskit format
+        """
+        pass
+    
+    @abstractmethod
+    def _transpile_braket(self, backend: Any, opt_level: int) -> None:
+        """Braket doesn't support client-side transpilation.
+        
+        AWS Braket performs transpilation server-side. Access the transpiled
+        circuit after execution via task.result().
+        
+        Args:
+            backend: Braket backend instance (unused)
+            opt_level: Optimization level (unused)
+            
+        Raises:
+            NotImplementedError: Always, as Braket doesn't support pre-transpilation
+        """
+        pass
+    
     @property
     def puzzle_hash(self) -> str:
         """str: Unique hash identifier for the current Sudoku puzzle."""
@@ -163,6 +205,40 @@ class QuantumSolver(ABC):
         """int: Number of empty cells in the Sudoku puzzle."""
         return self.puzzle.num_missing_cells
 
+    def get_gate_counts(self) -> dict | None:
+        """Get dictionary of gate counts from circuit construction.
+        
+        Returns gate counts generated during circuit building, or None if the
+        circuit hasn't been built yet or the solver doesn't support gate counting.
+        The dictionary uses clear naming: 'H', 'X', 'CX', 'CCX', 'C3X', etc.
+        
+        Returns:
+            dict | None: Gate counts dictionary or None if unavailable.
+        """
+        return getattr(self, 'gate_counts', None)
+    
+    def get_memory_usage(self) -> dict | None:
+        """Get memory usage statistics from circuit construction (advanced/dev feature).
+        
+        Returns memory tracking data collected during circuit building if memory
+        tracking was enabled. Returns None if the circuit hasn't been built yet,
+        memory tracking was disabled, or the feature is unavailable.
+        
+        Note: Memory tracking is disabled by default. Enable with track_memory=True
+        when setting the solver for development and profiling purposes.
+        
+        Returns:
+            dict | None: Memory statistics dictionary with keys:
+                - 'initial_mb': Starting memory usage
+                - 'current_mb': Current memory usage
+                - 'peak_mb': Peak memory across all snapshots
+                - 'delta_mb': Memory increase from initial
+                - 'snapshots': All recorded memory snapshots
+
+            Returns None if tracking was disabled or unavailable.
+        """
+        return getattr(self, 'memory_usage', None)
+
     @property
     def metadata_path(self) -> Path:
         """Path: File path to the puzzle's metadata JSON file.
@@ -187,22 +263,29 @@ class QuantumSolver(ABC):
         """
         return self.cache_root / "main_circuit.json"
     
-    def transpiled_circuit_path(self, backend_alias: str, opt_level: int) -> Path:
+    def transpiled_circuit_path(self, backend_alias: str, opt_level: int, sdk_type: str | None = None) -> Path:
         """Get the file path for a transpiled circuit cache.
         
         Constructs the cache path for a circuit transpiled for a specific backend
-        and optimization level.
+        and optimization level. Optionally includes SDK type to prevent cache conflicts.
         
         Args:
             backend_alias (str): Alias of the target backend.
             opt_level (int): Optimization level used for transpilation.
+            sdk_type (str | None): SDK type for cache separation ("pytket", "qiskit", "braket").
+                If None, uses SDK-agnostic path for backward compatibility.
             
         Returns:
             Path: File path for the transpiled circuit cache.
-                Format: .quantum_solver_cache/{puzzle_hash}/{solver_name}/{encoding}/
+                Format (with SDK): .quantum_solver_cache/{puzzle_hash}/{solver_name}/{encoding}/
+                        {backend_alias}/opt{opt_level}_{sdk_type}_circuit.json
+                Format (without SDK): .quantum_solver_cache/{puzzle_hash}/{solver_name}/{encoding}/
                         {backend_alias}/opt{opt_level}_circuit.json
         """
-        return self.cache_root / backend_alias / f"opt{opt_level}_circuit.json"
+        if sdk_type:
+            return self.cache_root / backend_alias / f"opt{opt_level}_{sdk_type}_circuit.json"
+        else:
+            return self.cache_root / backend_alias / f"opt{opt_level}_circuit.json"
 
     def build_main_circuit(self, backend: Any = None, sdk: str | None = None, force_overwrite: bool = False, flatten: bool = True) -> Any:
         """Load or build the main quantum circuit for the solving algorithm.
@@ -341,10 +424,10 @@ class QuantumSolver(ABC):
             circuit: Circuit in any SDK format
             
         Returns:
-            dict: Resource metrics (n_qubits, n_gates, etc.)
+            dict: Resource metrics (n_qubits, n_gates, gate_counts, etc.)
         """
         if hasattr(circuit, 'n_qubits'):  # pytket format
-            return {
+            resources = {
                 "n_qubits": circuit.n_qubits,
                 "n_gates": circuit.n_gates,
                 "n_mcx_gates": self.count_mcx_gates(circuit),
@@ -353,7 +436,7 @@ class QuantumSolver(ABC):
         elif hasattr(circuit, 'num_qubits'):  # qiskit format
             gate_count = sum(circuit.count_ops().values()) if hasattr(circuit, 'count_ops') else 0
             mcx_count = circuit.count_ops().get('mcx', 0) if hasattr(circuit, 'count_ops') else 0
-            return {
+            resources = {
                 "n_qubits": circuit.num_qubits,
                 "n_gates": gate_count,
                 "n_mcx_gates": mcx_count,
@@ -361,12 +444,24 @@ class QuantumSolver(ABC):
             }
         else:
             # Default/unknown format
-            return {
+            resources = {
                 "n_qubits": 0,
                 "n_gates": 0,
                 "n_mcx_gates": 0,
                 "depth": 0,
             }
+        
+        # Add gate_counts if available from the solver
+        gate_counts = getattr(self, 'gate_counts', None)
+        if gate_counts is not None:
+            resources["gate_counts"] = gate_counts
+        
+        # Add memory_usage if available from the solver
+        memory_usage = getattr(self, 'memory_usage', None)
+        if memory_usage is not None:
+            resources["memory_usage"] = memory_usage
+        
+        return resources
 
     def draw_circuit(self, circuit: Any | None = None, **kwargs) -> None:
         """Draw a visual representation of the quantum circuit.
@@ -449,10 +544,11 @@ class QuantumSolver(ABC):
         
         Compiles the main quantum circuit for the specified backend at the given
         optimization level. Handles caching of transpiled circuits and collects
-        resource metrics. Updates metadata with compilation results.
+        resource metrics. Updates metadata with compilation results. Automatically
+        routes to SDK-specific transpilation methods based on backend type.
 
         Args:
-            backend (Any): The pytket backend instance to compile for.
+            backend (Any): The backend instance to compile for (PyTKET, Qiskit, or Braket).
             backend_alias (str): Human-readable alias for the backend used in
                 metadata and error reporting.
             opt_level (int, optional): Optimization level for transpilation.
@@ -464,44 +560,63 @@ class QuantumSolver(ABC):
 
         Returns:
             dict[str, Any]: Dictionary containing either:
-                - Success: {"n_qubits": int, "n_gates": int, "depth": int}
+                - Success: {"n_qubits": int, "n_gates": int, "depth": int, "sdk_type": str, ...}
                 - Failure: {"error": str} with error description
                 
         Side Effects:
             - Caches transpiled circuit to disk (if store_transpiled is True)
-            - Updates metadata with backend resource metrics
+            - Updates metadata with backend resource metrics and SDK type
             - Persists metadata to disk
         """
         # ensure main circuit
         if self.main_circuit is None:
             self.build_main_circuit(force_overwrite=force_rebuild_main)
 
-        path = self.transpiled_circuit_path(backend_alias, opt_level)
+        # Detect SDK type from backend
+        sdk_type = self._detect_backend_sdk(backend)
+        
+        # Get SDK-aware cache path
+        path = self.transpiled_circuit_path(backend_alias, opt_level, sdk_type=sdk_type)
 
         try:
+            # Check if Braket (which doesn't support client-side transpilation)
+            if sdk_type == "braket":
+                raise NotImplementedError(
+                    f"AWS Braket performs transpilation server-side. "
+                    f"Pre-transpilation is not supported for backend '{backend_alias}'. "
+                    f"Access transpiled circuit information after execution via task.result()."
+                )
+            
             # load or compile
             if self.store_transpiled and path.exists() and not force_overwrite:
-                tcirc = self.load_circuit(path)
+                # Load from cache - need to handle SDK-specific formats
+                if sdk_type == "pytket":
+                    tcirc = self.load_circuit(path)
+                elif sdk_type == "qiskit":
+                    tcirc = self._load_qiskit_circuit(path)
+                else:
+                    tcirc = self.load_circuit(path)  # Fallback
             else:
-                try:
-                    tcirc = backend.get_compiled_circuit(
-                        self.main_circuit,
-                        optimisation_level=opt_level
-                    )
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to compile circuit for {backend_alias} "
-                        f"at opt_level {opt_level}: {e}"
-                    )
+                # Route to SDK-specific transpilation
+                if sdk_type == "pytket":
+                    tcirc = self._transpile_pytket(backend, opt_level)
+                elif sdk_type == "qiskit":
+                    tcirc = self._transpile_qiskit(backend, opt_level)
+                elif sdk_type == "braket":
+                    tcirc = self._transpile_braket(backend, opt_level)
+                else:
+                    raise ValueError(f"Unsupported SDK type: {sdk_type}")
+                
+                # Cache if enabled
                 if self.store_transpiled:
-                    self.save_circuit(tcirc, path)
+                    if sdk_type == "pytket":
+                        self.save_circuit(tcirc, path)
+                    elif sdk_type == "qiskit":
+                        self._save_qiskit_circuit(tcirc, path)
 
-            # extract metrics
-            res = {
-                "n_qubits": tcirc.n_qubits,
-                "n_gates":  tcirc.n_gates,
-                "depth":    tcirc.depth(),
-            }
+            # Extract metrics using SDK-aware method
+            res = self._extract_transpiled_metrics(tcirc, sdk_type)
+            res["sdk_type"] = sdk_type
 
             # persist metadata
             self._metadata.set_backend_resources(
@@ -513,7 +628,7 @@ class QuantumSolver(ABC):
             return res
 
         except Exception as e:
-            err = {"error": str(e)}
+            err = {"error": str(e), "sdk_type": sdk_type}
             self._metadata.set_backend_resources(
                 self.solver_name, self.encoding,
                 backend_alias, opt_level, err
@@ -877,6 +992,85 @@ class QuantumSolver(ABC):
         # Default implementation - shows that validation is "implemented" but always returns True
         # Override with real validation
         return True
+    
+    def _extract_transpiled_metrics(self, circuit: Any, sdk_type: str) -> dict[str, Any]:
+        """Extract resource metrics from a transpiled circuit in SDK-specific format.
+        
+        Args:
+            circuit: Transpiled circuit in any SDK format
+            sdk_type: SDK type of the circuit ("pytket", "qiskit", "braket")
+            
+        Returns:
+            dict: Resource metrics including n_qubits, n_gates, depth, and SDK-specific data
+        """
+        if sdk_type == "pytket":
+            # PyTKET format
+            return {
+                "n_qubits": circuit.n_qubits,
+                "n_gates": circuit.n_gates,
+                "depth": circuit.depth(),
+            }
+        elif sdk_type == "qiskit":
+            # Qiskit format - preserve both total depth and depth_by_qubit
+            gate_count = sum(circuit.count_ops().values()) if hasattr(circuit, 'count_ops') else 0
+            metrics = {
+                "n_qubits": circuit.num_qubits,
+                "n_gates": gate_count,
+                "depth": circuit.depth() if hasattr(circuit, 'depth') else 0,
+            }
+            # Add Qiskit-specific gate counts
+            if hasattr(circuit, 'count_ops'):
+                metrics["gate_counts"] = dict(circuit.count_ops())
+            # Add depth_by_qubit if available (Qiskit-specific)
+            if hasattr(circuit, 'depth') and callable(circuit.depth):
+                try:
+                    # Try to get per-qubit depth (available in some Qiskit versions)
+                    from qiskit.converters import circuit_to_dag
+                    dag = circuit_to_dag(circuit)
+                    if hasattr(dag, 'depth'):
+                        metrics["depth_by_qubit"] = {
+                            f"q{i}": dag.depth(filter_function=lambda node: i in [q.index for q in node.qargs])
+                            for i in range(circuit.num_qubits)
+                        }
+                except Exception:
+                    pass  # Skip if not available
+            return metrics
+        elif sdk_type == "braket":
+            # Braket format (if we ever support it)
+            raise NotImplementedError("Braket transpilation metrics not implemented")
+        else:
+            raise ValueError(f"Unknown SDK type: {sdk_type}")
+    
+    def _save_qiskit_circuit(self, circuit: Any, path: Path) -> None:
+        """Save a Qiskit QuantumCircuit to JSON format.
+        
+        Args:
+            circuit: Qiskit QuantumCircuit to save
+            path: File path for saving
+        """
+        from qiskit import qpy
+        import io
+        
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Use QPY format for Qiskit circuits (more robust than QASM)
+        with path.open("wb") as f:
+            qpy.dump(circuit, f)
+    
+    def _load_qiskit_circuit(self, path: Path) -> Any:
+        """Load a Qiskit QuantumCircuit from JSON format.
+        
+        Args:
+            path: File path to load from
+            
+        Returns:
+            Qiskit QuantumCircuit
+        """
+        from qiskit import qpy
+        
+        with path.open("rb") as f:
+            circuits = qpy.load(f)
+            return circuits[0] if isinstance(circuits, list) else circuits
 
     @staticmethod
     def count_mcx_gates(circuit: Circuit) -> int:

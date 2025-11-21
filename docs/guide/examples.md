@@ -4,8 +4,7 @@ A few small, runnable patterns you can adapt.
 
 ## Generate, solve locally, and visualize
 ```python
-from sudoku_nisq.q_sudoku import QSudoku
-from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
+from sudoku_nisq import QSudoku, ExactCoverQuantumSolver
 
 p = QSudoku.generate(size=9, num_missing_cells=30)
 p.set_solver(ExactCoverQuantumSolver, encoding="simple")
@@ -17,6 +16,8 @@ p.counts_plot(res, backend_alias="Local", shots=512)
 
 ## Use an existing board
 ```python
+from sudoku_nisq import QSudoku, ExactCoverQuantumSolver
+
 board_4x4 = [
     [1, 0, 0, 4],
     [0, 0, 1, 0],
@@ -25,17 +26,18 @@ board_4x4 = [
 ]
 
 p = QSudoku.from_board(board_4x4)
-# choose solver etc.
+p.set_solver(ExactCoverQuantumSolver)
 ```
 
-## Transpile-only (analyze resources per level)
+## Transpile and compare metrics by level
 ```python
-alias = "brisbane"  # after init_ibm(...)
-res0 = p.transpile(alias, opt_level=0)
-res2 = p.transpile(alias, opt_level=2)
-print(res0.get("n_gates"), res2.get("n_gates"))
-```
+# After initializing a backend alias (e.g., via init_ibm)
+# alias = p.init_ibm(api_token="<token>", instance="<crn>", device="ibm_brisbane")
 
-```{todo}
-Add a worked hardware example once test credentials and device availability are standardized.
+_ = p.transpile(alias, opt_level=0)
+_ = p.transpile(alias, opt_level=2)
+
+summary = p.report_resources()
+ec = summary["solvers"]["ExactCoverQuantumSolver"]["simple"]["backends"][alias]
+print("opt0 n_gates:", ec[0]["n_gates"], "opt2 n_gates:", ec[2]["n_gates"])  # keys are ints
 ```

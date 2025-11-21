@@ -2,6 +2,16 @@
 
 ## Latest highlights
 
+- **Gate Counting and Memory Tracking Features (November 2025)**: Added automated tracking for exact cover quantum circuits.
+  - **Gate Counting** (always enabled): Tracks fundamental gates (H, X, CX/CCX/C3X, CZ/CCZ, Measure) by type and control count.
+  - **Memory Tracking** (optional, for advanced/dev use): Lightweight RAM usage monitoring during circuit construction.
+  - Implementations for PyTKET (primary), Qiskit (native), and Braket (native Grover builder). Braket still performs transpilation server-side.
+  - Consistent gate counts across all SDKs with `decompose_cnz` parameter.
+  - Memory profiling with initial, peak, current, and delta metrics (enable via `track_memory=True`).
+  - Accessible via `solver.get_gate_counts()` and `solver.get_memory_usage()`.
+  - Gate counts always included in circuit metadata; memory usage included when tracking enabled.
+  - See `GATE_COUNTING_IMPLEMENTATION.md` for details.
+
 - Removed deprecated duplicate modules at `sudoku_nisq/exact_cover_encoding.py` and `sudoku_nisq/exact_cover_solver.py`.
 	- Canonical imports are now: `from sudoku_nisq.encodings.exact_cover_encoding import ExactCoverEncoding` and `from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver`.
 	- Public API convenience imports are available: `from sudoku_nisq import ExactCoverEncoding, ExactCoverQuantumSolver`.

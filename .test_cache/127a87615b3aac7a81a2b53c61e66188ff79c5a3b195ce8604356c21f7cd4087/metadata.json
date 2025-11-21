@@ -1,0 +1,94 @@
+{
+  "board": "[[0, 0], [0, 0]]",
+  "num_missing_cells": 4,
+  "puzzle_hash": "127a87615b3aac7a81a2b53c61e66188ff79c5a3b195ce8604356c21f7cd4087",
+  "size": 2,
+  "solvers": {
+    "ExactCoverQuantumSolver": {
+      "encodings": {
+        "simple": {
+          "backends": {
+            "aer": {
+              "0": {
+                "depth": 338,
+                "n_gates": 1634,
+                "n_qubits": 45,
+                "sdk_type": "pytket"
+              }
+            },
+            "aer_cache_test": {
+              "0": {
+                "depth": 338,
+                "n_gates": 1634,
+                "n_qubits": 45,
+                "sdk_type": "pytket"
+              }
+            },
+            "aer_test": {
+              "0": {
+                "depth": 338,
+                "n_gates": 1634,
+                "n_qubits": 45,
+                "sdk_type": "pytket"
+              }
+            },
+            "braket": {
+              "0": {
+                "error": "AWS Braket performs transpilation server-side. Pre-transpilation is not supported for backend 'braket'. Access transpiled circuit information after execution via task.result().",
+                "sdk_type": "braket"
+              }
+            },
+            "braket_test": {
+              "0": {
+                "error": "AWS Braket performs transpilation server-side. Pre-transpilation is not supported for backend 'braket_test'. Access transpiled circuit information after execution via task.result().",
+                "sdk_type": "braket"
+              }
+            },
+            "metadata_test": {
+              "0": {
+                "depth": 338,
+                "n_gates": 1634,
+                "n_qubits": 45,
+                "sdk_type": "pytket"
+              }
+            },
+            "qiskit_aer": {
+              "0": {
+                "error": "argument out of range",
+                "sdk_type": "qiskit"
+              }
+            }
+          },
+          "main_circuit_resources": {
+            "depth": 34,
+            "gate_counts": {
+              "C36X": 8,
+              "C3X": 384,
+              "C7X": 8,
+              "CCX": 384,
+              "CX": 384,
+              "H": 153,
+              "Measure": 8,
+              "X": 513
+            },
+            "memory_usage": {
+              "current_mb": 259.375,
+              "delta_mb": 0.1796875,
+              "initial_mb": 259.1953125,
+              "peak_mb": 259.375,
+              "snapshots": {
+                "after_qiskit_build": 259.375,
+                "before_circuit": 259.1953125,
+                "initial": 259.1953125
+              }
+            },
+            "n_gates": 50,
+            "n_mcx_gates": 0,
+            "n_qubits": 45
+          },
+          "sdk_type": "qiskit"
+        }
+      }
+    }
+  }
+}

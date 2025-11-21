@@ -8,19 +8,11 @@ from sudoku_py import SudokuGenerator
 
 @dataclass
 class SudokuPuzzle:
-    """Represents a Sudoku puzzle with comprehensive manipulation capabilities.
-    
-    This class provides functionality for creating, validating, and analyzing Sudoku
-    puzzles. It supports both manual creation from existing boards and automatic
-    generation of new puzzles with specified difficulty levels.
-    
-    Attributes:
-        board (List[List[int]]): 2D list representing the Sudoku grid. Empty cells
-            are represented as 0 or None, filled cells contain integers 1-n.
-        subgrid_size (int): Size of each subgrid (e.g., 3 for a 9x9 puzzle).
-        board_size (int): Total size of the board (subgrid_size * subgrid_size).
-        num_missing_cells (int): Number of empty cells in the puzzle.
-        canonicalize (bool): Whether the puzzle is in canonical form.
+    """Represents a Sudoku puzzle with creation, validation, and analysis helpers.
+
+    Provides methods to generate puzzles, derive metadata (hash, counts, solution
+    enumeration), and basic visualization. Use `SudokuPuzzle.generate` for new
+    puzzles or `SudokuPuzzle.from_board` to wrap an existing grid.
     """
     board: List[List[int]]
     subgrid_size: int

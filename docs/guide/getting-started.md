@@ -6,65 +6,48 @@ This guide walks through solving a Sudoku puzzle using the quantum exact cover s
 ```python
 from sudoku_nisq import QSudoku
 puzzle = QSudoku.generate(size=9, num_missing_cells=25)
-# TODO: Demonstrate loading from a file or predefined pattern.
+# Or load an existing board with QSudoku.from_board([...])
 ```
 
-## 2. Choose Encoding Strategy
+## 2. Choose Encoding Strategy and Set Solver
 Two strategies are available:
 - `simple` (default): One subset per (row, col, digit) possibility.
 - `pattern`: Row-wise digit placement patterns (can reduce subset count).
 
 ```python
 from sudoku_nisq import ExactCoverQuantumSolver
-solver = ExactCoverQuantumSolver(puzzle=puzzle, encoding="simple")
+solver = puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
 ```
 
 ## 3. Resource Estimation (Optional)
 ```python
 resources = solver.resource_estimation()
 print(resources)
-# TODO: Interpret resource metrics in docs (n_qubits, MCX_gates, etc.)
 ```
 
-## 4. Attach a Backend (Provider Abstraction)
+## 4. Attach a Backend (Simple IBM Flow)
 ```python
-# TODO: Replace placeholders with a real flow once auth examples are finalized
-# manager = BackendManager.inst()
-# manager.authenticate_ibm(api_token="<token>", instance="<instance>")
-# manager.add_ibm_device("ibm_brisbane", alias="brisbane")
+# Replace with your credentials and device
+# alias = puzzle.init_ibm(api_token="<token>", instance="<crn>", device="ibm_brisbane")
 ```
 
 ## 5. Run the Solver
 ```python
-# TODO: Confirm public method naming (run_local vs run) after API review
-# result = puzzle.run("brisbane", opt_level=1, shots=512)
-# print(result["counts"])  # Example processed output
+# Local simulator (no credentials)
+result = puzzle.run_aer(shots=512)
+
+# Or on hardware/simulator via provider (requires init_ibm above)
+# result = puzzle.run(alias, opt_level=1, shots=512)
 ```
 
-## 6. Decode / Verify Solution
+## 6. Visualize and Summarize
 ```python
-# TODO: Add solution verification helper once finalized
-# assert puzzle.is_solved()
+puzzle.counts_plot(result, backend_alias="Local", shots=512)
+summary = puzzle.report_resources()
 ```
-
-## Next Steps
-- Try the `pattern` encoding to compare resource usage.
-- Enable verbose logging to inspect circuit build phases. (TODO: add logging docs)
-- Run on different providers for comparative benchmarking. (TODO: benchmarking guide)
 
 ```{toctree}
 :maxdepth: 1
 
 architecture
 ```
-
-## FAQ (TODO)
-- How are subsets constructed?
-- How does pattern encoding reduce search space?
-- What causes large MCX counts?
-- How to add a custom provider?
-
-## Troubleshooting (TODO)
-- Authentication failures
-- Circuit too large for backend
-- No solutions found / multiple solutions ambiguity

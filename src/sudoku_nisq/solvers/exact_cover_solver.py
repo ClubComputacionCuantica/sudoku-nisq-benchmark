@@ -4,6 +4,7 @@ from typing import Literal
 
 from sudoku_nisq.quantum_solver import QuantumSolver
 from sudoku_nisq.encodings.exact_cover_encoding import ExactCoverEncoding
+from sudoku_nisq.utils.memory_tracker import MemoryTracker
 
 class ExactCoverQuantumSolver(QuantumSolver):
     """
@@ -18,6 +19,13 @@ class ExactCoverQuantumSolver(QuantumSolver):
     def __init__(self, puzzle=None, metadata_manager=None, encoding: Literal["simple", "pattern"] = "simple",
                  num_solutions=None, universe=None, subsets=None, **kwargs):
         """Initialize the ExactCoverQuantumSolver with Sudoku puzzle and configuration."""
+        
+        # Extract gate counting options before passing to parent
+        self.decompose_cnz = kwargs.pop('decompose_cnz', True)  # Default: decompose for consistency
+        
+        # Extract memory tracking option (advanced/dev feature)
+        self.track_memory = kwargs.pop('track_memory', False)  # Default: disabled for production use
+        
         # Initialize the base class with all parameters
         super().__init__(
             puzzle=puzzle,
@@ -54,19 +62,54 @@ class ExactCoverQuantumSolver(QuantumSolver):
         self.u_size = len(self.universe)        # Total elements to cover
         self.s_size = len(self.subsets)         # Number of subsets
         self.b = math.ceil(math.log2(self.s_size)) if self.s_size > 1 else 1  # Bits for counting
+        
+        # Gate counting (populated when circuit is built)
+        self.gate_counts = None
+        
+        # Memory tracking (populated when circuit is built)
+        self.memory_usage = None
 
     def _build_sdk_circuit(self, sdk_type: str):
-        """Build exact cover circuit using the specified SDK."""
+        """Build exact cover circuit using the specified SDK.
+        
+        Returns:
+            Circuit object in the specified SDK format. Gate counts are stored
+            in self.gate_counts and memory usage in self.memory_usage (if enabled) as side effects.
+        """
+        # Track memory during circuit construction (optional, for advanced/dev use)
+        if self.track_memory:
+            mem_tracker = MemoryTracker()
+            mem_tracker.start()
+            mem_tracker.snapshot('before_circuit')
+        
         if sdk_type == "pytket":
             from sudoku_nisq.circuits.exact_cover.pytket_impl import build_exact_cover_circuit
-            return build_exact_cover_circuit(self)
+            circuit, gate_counts = build_exact_cover_circuit(self, decompose_cnz=self.decompose_cnz)
+            if self.track_memory:
+                mem_tracker.snapshot('after_pytket_build')
+            self.gate_counts = gate_counts
+            if self.track_memory:
+                self.memory_usage = mem_tracker.report()
+            return circuit
         elif sdk_type == "qiskit":
             from sudoku_nisq.circuits.exact_cover.qiskit_impl import build_exact_cover_circuit
-            return build_exact_cover_circuit(self)
+            circuit, gate_counts = build_exact_cover_circuit(self)
+            if self.track_memory:
+                mem_tracker.snapshot('after_qiskit_build')
+            self.gate_counts = gate_counts
+            if self.track_memory:
+                self.memory_usage = mem_tracker.report()
+            return circuit
         elif sdk_type == "braket":
             # For now, fallback to pytket
             from sudoku_nisq.circuits.exact_cover.pytket_impl import build_exact_cover_circuit
-            return build_exact_cover_circuit(self)
+            circuit, gate_counts = build_exact_cover_circuit(self, decompose_cnz=self.decompose_cnz)
+            if self.track_memory:
+                mem_tracker.snapshot('after_braket_build')
+            self.gate_counts = gate_counts
+            if self.track_memory:
+                self.memory_usage = mem_tracker.report()
+            return circuit
         else:
             raise ValueError(f"Unsupported SDK type: {sdk_type}")
 
@@ -147,3 +190,83 @@ class ExactCoverQuantumSolver(QuantumSolver):
         # 2. All universe elements are covered
         return (len(covered_elements) == len(set(covered_elements)) and 
                 set(covered_elements) == set(self.universe))
+    
+    def _transpile_pytket(self, backend, opt_level: int):
+        """Transpile circuit using PyTKET backend.
+        
+        Uses PyTKET's native backend compilation interface which applies
+        hardware-specific gate decompositions and optimizations.
+        
+        Args:
+            backend: PyTKET backend instance with get_compiled_circuit method
+            opt_level: Optimization level for transpilation (0-2)
+            
+        Returns:
+            Circuit: Transpiled circuit in PyTKET format
+        """
+        try:
+            tcirc = backend.get_compiled_circuit(
+                self.main_circuit,
+                optimisation_level=opt_level
+            )
+            return tcirc
+        except Exception as e:
+            raise RuntimeError(
+                f"PyTKET transpilation failed at opt_level {opt_level}: {e}"
+            )
+    
+    def _transpile_qiskit(self, backend, opt_level: int):
+        """Transpile circuit using Qiskit native transpiler.
+        
+        Uses Qiskit's qiskit.compiler.transpile() function which supports
+        extensive optimization strategies and hardware-specific compilation.
+        
+        Args:
+            backend: Qiskit backend instance
+            opt_level: Optimization level for transpilation (0-3)
+            
+        Returns:
+            QuantumCircuit: Transpiled circuit in Qiskit format
+        """
+        from qiskit.compiler import transpile
+        
+        # Ensure main circuit is in Qiskit format
+        if not hasattr(self.main_circuit, 'qubits'):
+            # Convert from other formats if needed
+            raise TypeError(
+                f"Main circuit must be a Qiskit QuantumCircuit for Qiskit transpilation. "
+                f"Got {type(self.main_circuit)}. Rebuild circuit with sdk='qiskit'."
+            )
+        
+        try:
+            tcirc = transpile(
+                self.main_circuit,
+                backend=backend,
+                optimization_level=opt_level,
+            )
+            return tcirc
+        except Exception as e:
+            raise RuntimeError(
+                f"Qiskit transpilation failed at opt_level {opt_level}: {e}"
+            )
+    
+    def _transpile_braket(self, backend, opt_level: int):
+        """Braket doesn't support client-side transpilation.
+        
+        AWS Braket performs all transpilation server-side during job execution.
+        The transpiled circuit can be accessed after execution through the task result.
+        
+        Args:
+            backend: Braket backend instance (unused)
+            opt_level: Optimization level (unused)
+            
+        Raises:
+            NotImplementedError: Always, as Braket doesn't support pre-transpilation
+        """
+        raise NotImplementedError(
+            "AWS Braket performs transpilation server-side. "
+            "Pre-transpilation is not supported. "
+            "Access transpiled circuit information after execution via task.result(). "
+            "Use puzzle.get_transpiled_circuit_from_task(task_result) to extract "
+            "transpilation information from completed jobs."
+        )

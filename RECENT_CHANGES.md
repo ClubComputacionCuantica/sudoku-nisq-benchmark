@@ -3,6 +3,73 @@
 ## Overview
 This document summarizes the recent improvements made to the sudoku-nisq-benchmark codebase, focusing on code quality, documentation accuracy, and architectural improvements.
 
+## 🔢 Gate Counting and Memory Tracking Features (November 2025)
+
+### New Functionality
+- **Automated Gate Counting**: Added comprehensive gate counting to exact cover quantum circuits
+- **Lightweight Memory Tracking**: Added RAM usage monitoring during circuit construction
+- **Multi-Controlled Gates**: Tracks gates by control count (CX, CCX, C3X, C8X, etc.)
+- **SDK Consistency**: Gate counts are consistent across PyTKET, Qiskit, and Braket implementations
+- **Optional Decomposition**: Configurable `decompose_cnz` parameter for PyTKET gate representation
+- **Memory Profiling**: Track memory usage at key construction points to identify bottlenecks
+
+### Implementation Details
+- **GateCounter Class**: Simple dict-based counter in `pytket_impl.py`, `qiskit_impl.py`, and `braket_impl.py`
+- **MemoryTracker Class**: Lightweight psutil-based RAM monitoring in `utils/memory_tracker.py` (optional)
+- **Gate Types Tracked**: H, X, CX/CCX/C3X (by control count), CZ/CCZ, Measure
+- **Memory Metrics**: Initial, peak, current, and delta memory usage with timestamped snapshots
+- **Circuit Builders**: All builders (_counter, _oracle, _diffuser) now return gate counts
+- **SDK Coverage**: Full support for PyTKET, Qiskit, and Amazon Braket
+- **Solver Integration**: `ExactCoverQuantumSolver` stores gate counts (always) and memory usage (optional)
+- **Configuration**: Gate counting always enabled; memory tracking enabled via `track_memory=True` parameter
+- **Base Class Support**: `QuantumSolver.get_gate_counts()` and `get_memory_usage()` provide unified access
+- **Metadata Inclusion**: Gate counts always included; memory usage included when tracking is enabled
+
+### Configuration Options
+- **`decompose_cnz=True` (default)**: PyTKET counts CnZ gates as H+MCX+H decomposition for consistency with Qiskit
+- **`decompose_cnz=False`**: PyTKET counts CnZ as single native gate operation
+- **`track_memory=False` (default)**: Memory tracking disabled for production use
+- **`track_memory=True`**: Enable memory profiling for development/debugging
+
+### Usage
+```python
+from sudoku_nisq import QSudoku, ExactCoverQuantumSolver
+
+# Basic usage - gate counting only (always enabled)
+puzzle = QSudoku.generate(size=4, num_missing_cells=2)
+puzzle.set_solver(ExactCoverQuantumSolver, encoding='simple')
+circuit = puzzle.build_circuit()
+
+# Access gate counts (always available)
+gate_counts = puzzle._solver.get_gate_counts()
+print(gate_counts)  # {'H': 9, 'X': 5, 'CX': 17, 'C8X': 1, 'Measure': 2}
+
+# Advanced usage - enable memory tracking for development/profiling
+puzzle.set_solver(ExactCoverQuantumSolver, encoding='simple', track_memory=True)
+circuit = puzzle.build_circuit()
+
+# Access memory usage (only if track_memory=True)
+memory_usage = puzzle._solver.get_memory_usage()
+if memory_usage:
+    print(f"Memory delta: {memory_usage['delta_mb']:.2f} MB")
+    print(f"Peak memory: {memory_usage['peak_mb']:.2f} MB")
+```
+
+### Benefits
+- **Algorithm Analysis**: Precise fundamental gate counts for circuit complexity analysis
+- **Memory Profiling (Optional)**: Track RAM usage to identify bottlenecks when scaling to larger problems
+- **Cross-SDK Comparison**: Consistent metrics across PyTKET, Qiskit, and Braket
+- **Resource Planning**: Helps estimate circuit resources and memory requirements before execution
+- **No External Dependencies**: Gate counting always works; memory tracking uses psutil (already installed)
+- **Universal Implementation**: Same counting logic across all three major quantum SDKs
+- **Minimal Overhead**: Gate counting negligible; memory tracking opt-in for when you need it
+- **Production Ready**: Default configuration optimized for production use with optional dev features
+
+### Documentation
+- **GATE_COUNTING_IMPLEMENTATION.md**: Complete implementation guide for both features
+- **Test Suite**: `test_gate_counting.py` with 5 comprehensive tests (PyTKET, Qiskit, Braket, consistency, metadata)
+- **Examples**: `example_gate_counting.py`, `example_gate_counting_options.py`, and `example_memory_tracking.py`
+
 ## 🏗️ Backend Refactoring (Provider Pattern)
 
 ### Architecture Changes

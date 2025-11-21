@@ -15,3 +15,9 @@ sudoku\_nisq.circuits.exact\_cover.pytket\_impl
       _compute_grover_iterations
       build_exact_cover_circuit
    
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      GateCounter
+   

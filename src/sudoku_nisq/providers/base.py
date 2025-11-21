@@ -32,7 +32,7 @@ class QuantumProvider(ABC):
     def authenticate(self, **kwargs: Any) -> List[str]:
         """Authenticate with the provider and return available devices.
 
-        Subclasses should accept provider-specific parameters via **kwargs.
+        Subclasses should accept provider-specific parameters via ``**kwargs``.
         Required parameters must be validated internally and raise a
         descriptive error if missing.
         """
