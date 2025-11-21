@@ -25,10 +25,6 @@ dependencies = [
 ]
 
 [tool.poetry]
-name = "sudoku-nisq-benchmark"
-version = "0.1.0"
-description = "Framework designed to demonstrate how Sudoku puzzles can serve as a accessible benchmarking problems for near-term quantum computers."
-authors = ["Club de Computacion Cuantica"]
 packages = [
   { include = "sudoku_nisq", from = "src" }
 ]
