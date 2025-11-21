@@ -1,6 +1,6 @@
 """IBM Quantum provider implementation."""
 
-from typing import List, Optional, Any
+from typing import List, Optional
 from pytket.extensions.qiskit import IBMQBackend, set_ibmq_config
 from qiskit_ibm_runtime import QiskitRuntimeService
 from .base import QuantumProvider

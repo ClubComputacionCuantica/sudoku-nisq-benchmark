@@ -9,6 +9,10 @@ from sudoku_nisq.backends import BackendManager
 
 if TYPE_CHECKING:
     from sudoku_nisq.quantum_solver import QuantumSolver
+    try:
+        from pytket.extensions.quantinuum.backends.credential_storage import CredentialStorage  # noqa: F401
+    except Exception:  # pragma: no cover
+        pass
 
 class QSudoku():
     """High-level interface for quantum Sudoku solving with integrated backend management.

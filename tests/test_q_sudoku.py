@@ -205,52 +205,56 @@ class TestQSudoku:
         mock_solver.build_main_circuit.assert_not_called()
         mock_solver.draw_circuit.assert_called_once_with(mock_circuit)
 
-    @patch('sudoku_nisq.q_sudoku.BackendManager')
-    def test_attach_backend(self, mock_backend_manager, q_sudoku_4x4):
+    @patch('sudoku_nisq.q_sudoku.BackendManager.inst')
+    def test_attach_backend(self, mock_inst, q_sudoku_4x4):
         """Test attaching a backend."""
+        mock_manager = Mock()
         mock_backend = Mock()
-        mock_backend_manager.get.return_value = mock_backend
-        
+        mock_manager.get.return_value = mock_backend
+        mock_inst.return_value = mock_manager
+
         q_sudoku_4x4.attach_backend("test_backend")
-        
-        mock_backend_manager.get.assert_called_once_with("test_backend")
+
+        mock_manager.get.assert_called_once_with("test_backend")
         assert q_sudoku_4x4._attached_backends["test_backend"] == mock_backend
 
-    @patch('sudoku_nisq.q_sudoku.BackendManager')
-    def test_attach_backend_not_found(self, mock_backend_manager, q_sudoku_4x4):
+    @patch('sudoku_nisq.q_sudoku.BackendManager.inst')
+    def test_attach_backend_not_found(self, mock_inst, q_sudoku_4x4):
         """Test attaching a backend that doesn't exist."""
-        mock_backend_manager.get.side_effect = ValueError("Backend not found")
-        
+        mock_manager = Mock()
+        mock_manager.get.side_effect = ValueError("Backend not found")
+        mock_inst.return_value = mock_manager
+
         with pytest.raises(ValueError, match="Backend not found"):
             q_sudoku_4x4.attach_backend("nonexistent_backend")
 
-    @patch('sudoku_nisq.q_sudoku.BackendManager')
-    def test_init_ibm(self, mock_backend_manager, q_sudoku_4x4):
+    @patch('sudoku_nisq.q_sudoku.BackendManager.inst')
+    def test_init_ibm(self, mock_inst, q_sudoku_4x4):
         """Test initializing IBM backend."""
-        mock_backend_manager.init_ibm.return_value = "ibm_test"
+        mock_manager = Mock()
+        mock_manager.init_ibm.return_value = "ibm_test"
         mock_backend = Mock()
-        mock_backend_manager.get.return_value = mock_backend
-        
+        mock_manager.get.return_value = mock_backend
+        mock_inst.return_value = mock_manager
+
         result = q_sudoku_4x4.init_ibm("token", "instance", "device", "custom_alias")
-        
-        mock_backend_manager.init_ibm.assert_called_once_with(
-            "token", "instance", "device", "custom_alias"
-        )
+
+        mock_manager.init_ibm.assert_called_once_with(device="device", alias="custom_alias", api_token="token", instance="instance")
         assert result == "ibm_test"
         assert q_sudoku_4x4._attached_backends["ibm_test"] == mock_backend
 
-    @patch('sudoku_nisq.q_sudoku.BackendManager')
-    def test_init_quantinuum(self, mock_backend_manager, q_sudoku_4x4):
+    @patch('sudoku_nisq.q_sudoku.BackendManager.inst')
+    def test_init_quantinuum(self, mock_inst, q_sudoku_4x4):
         """Test initializing Quantinuum backend."""
-        mock_backend_manager.init_quantinuum.return_value = "quantinuum_test"
+        mock_manager = Mock()
+        mock_manager.init_quantinuum.return_value = "quantinuum_test"
         mock_backend = Mock()
-        mock_backend_manager.get.return_value = mock_backend
-        
+        mock_manager.get.return_value = mock_backend
+        mock_inst.return_value = mock_manager
+
         result = q_sudoku_4x4.init_quantinuum("device", "custom_alias")
-        
-        mock_backend_manager.init_quantinuum.assert_called_once_with(
-            "device", "custom_alias", None, None
-        )
+
+        mock_manager.init_quantinuum.assert_called_once_with(device="device", alias="custom_alias", token_store=None, provider=None)
         assert result == "quantinuum_test"
         assert q_sudoku_4x4._attached_backends["quantinuum_test"] == mock_backend
 
@@ -285,7 +289,10 @@ class TestQSudoku:
 
     def test_run_no_backend(self, q_sudoku_4x4):
         """Test running without attached backend raises error."""
-        with pytest.raises(ValueError, match="Backend 'test_backend' not attached"):
+        # Provide a mock solver so backend lookup is reached
+        mock_solver = Mock()
+        q_sudoku_4x4._solver = mock_solver
+        with pytest.raises(ValueError, match=r"Backend 'test_backend' not found."):
             q_sudoku_4x4.run("test_backend", 1, 100)
 
     def test_run_no_solver(self, q_sudoku_4x4):
@@ -423,14 +430,16 @@ class TestQSudoku:
 
     def test_multiple_backends_attachment(self, q_sudoku_4x4):
         """Test attaching multiple backends."""
-        with patch('sudoku_nisq.q_sudoku.BackendManager') as mock_backend_manager:
+        with patch('sudoku_nisq.q_sudoku.BackendManager.inst') as mock_inst:
+            mock_manager = Mock()
             mock_backend1 = Mock()
             mock_backend2 = Mock()
-            mock_backend_manager.get.side_effect = [mock_backend1, mock_backend2]
-            
+            mock_manager.get.side_effect = [mock_backend1, mock_backend2]
+            mock_inst.return_value = mock_manager
+
             q_sudoku_4x4.attach_backend("backend1")
             q_sudoku_4x4.attach_backend("backend2")
-            
+
             assert q_sudoku_4x4._attached_backends["backend1"] == mock_backend1
             assert q_sudoku_4x4._attached_backends["backend2"] == mock_backend2
             assert len(q_sudoku_4x4._attached_backends) == 2

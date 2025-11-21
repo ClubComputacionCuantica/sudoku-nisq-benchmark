@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction --no-root --with dev
       
+      - name: Pin commit ref for linkcode
+        run: echo "DOCS_GIT_REF=${GITHUB_SHA}" >> $GITHUB_ENV
+
       - name: Build Sphinx docs
         run: |
           cd docs
@@ -35,8 +38,8 @@ jobs:
       - name: Add .nojekyll file
         run: touch docs/_build/html/.nojekyll
       
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
+      - name: Upload artifact (Pages)
+        uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_build/html
 
@@ -49,4 +52,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4

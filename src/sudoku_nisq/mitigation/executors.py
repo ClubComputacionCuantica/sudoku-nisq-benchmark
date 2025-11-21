@@ -239,7 +239,7 @@ See Also
 - Mitiq documentation: https://mitiq.readthedocs.io/
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 try:
     from mitiq import zne, pec
