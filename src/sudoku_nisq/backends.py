@@ -335,6 +335,10 @@ class BackendManager:
     def get_backend_sdk(self, alias: str) -> str:
         """Get the SDK type for a given backend alias.
         
+        Query the provider to determine which SDK the backend uses. This ensures
+        SDK selection is provider-driven (IBM→Qiskit, Quantinuum→PyTKET, AWS→Braket)
+        rather than based on interface detection.
+        
         Args:
             alias (str): The backend alias to check.
             
@@ -347,23 +351,9 @@ class BackendManager:
         if alias not in self._backend_to_provider:
             raise ValueError(f"Backend '{alias}' not found")
         
-        backend = self.get(alias)
-        
-        # Check for pytket backend characteristics
-        if hasattr(backend, 'get_compiled_circuit') and hasattr(backend, 'process_circuit'):
-            return "pytket"
-        
-        # Check for qiskit backend characteristics  
-        elif hasattr(backend, 'transpile') or 'qiskit' in str(type(backend)).lower():
-            return "qiskit"
-            
-        # Check for braket backend characteristics
-        elif hasattr(backend, 'run') and 'braket' in str(type(backend)).lower():
-            return "braket"
-            
-        else:
-            # Default to pytket for unknown backends
-            return "pytket"
+        provider_name = self._backend_to_provider[alias]
+        provider = self._providers[provider_name]
+        return provider.sdk_type
 
     # -----------------------------
     # Singleton accessor (no API shadowing)

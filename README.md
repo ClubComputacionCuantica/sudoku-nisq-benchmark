@@ -1,5 +1,8 @@
 # Sudoku NISQ Evaluation Framework
 
+[![Docs Status](https://img.shields.io/badge/docs-dev-green.svg)](https://ClubComputacionCuantica.github.io/sudoku-nisq-benchmark/)
+
+
 ## Table of Contents
 - [Introduction](#introduction)
 - [Key Features](#key-features)
@@ -46,7 +49,7 @@ This makes Sudoku accessible to study current limitations of quantum devices.
 ```python
 # Generate a 4x4 Sudoku puzzle with 2 missing cells
 from sudoku_nisq import QSudoku
-sudoku = QSudoku.generate(subgrid_size=2, num_missing_cells=2)
+sudoku = QSudoku.generate(size=4, num_missing_cells=2)  # or size=2 for 2x2 (no real subgrids)
 
 # Visualize the puzzle
 sudoku.plot_puzzle()
@@ -151,6 +154,12 @@ The framework aims to:
 - Optimize circuit designs for better scalability.
 - Extend support for additional quantum hardware providers.
 - Develop new encoding strategies for improved efficiency.
+
+---
+
+### Documentation & Versioning
+
+The hosted documentation currently tracks the active development branch (`dev`). Once the project stabilizes, the docs workflow will switch to `main` and versioned snapshots (tags) may be published for each release (e.g., `v0.x`). Until then, source links in API pages reference the `dev` branch.
 
 ---
 

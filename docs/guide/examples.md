@@ -7,7 +7,7 @@ A few small, runnable patterns you can adapt.
 from sudoku_nisq.q_sudoku import QSudoku
 from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
 
-p = QSudoku.generate(subgrid_size=3, num_missing_cells=30)
+p = QSudoku.generate(size=9, num_missing_cells=30)
 p.set_solver(ExactCoverQuantumSolver, encoding="simple")
 
 c = p.build_circuit()

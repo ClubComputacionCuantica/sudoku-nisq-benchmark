@@ -5,7 +5,7 @@ This guide walks through solving a Sudoku puzzle using the quantum exact cover s
 ## 1. Create or Load a Puzzle
 ```python
 from sudoku_nisq import QSudoku
-puzzle = QSudoku.generate(subgrid_size=3, num_missing_cells=25)
+puzzle = QSudoku.generate(size=9, num_missing_cells=25)
 # TODO: Demonstrate loading from a file or predefined pattern.
 ```
 

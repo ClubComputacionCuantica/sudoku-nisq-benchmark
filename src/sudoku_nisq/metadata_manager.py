@@ -288,6 +288,7 @@ class MetadataManager:
         solver_name: str,
         encoding: str,
         resources: Mapping[str, int],
+        sdk_type: str = "pytket",
     ) -> None:
         """Store quantum circuit resource metrics for a solver's main circuit.
         
@@ -304,6 +305,8 @@ class MetadataManager:
                 - n_gates: Total gate count in the circuit
                 - n_mcx_gates: Number of multi-controlled X gates
                 - depth: Circuit depth (critical path length)
+            sdk_type (str): SDK used to build the circuit ('qiskit', 'pytket', 'braket').
+                Defaults to 'pytket' for backward compatibility.
                 
         Example:
             .. code-block:: python
@@ -331,7 +334,11 @@ class MetadataManager:
         # Get (or create) the encoding sub-section
         encoding_section = solver_section.setdefault("encodings", {}) \
                                         .setdefault(encoding, {})
-        # Now write the main_circuit_resources if they’ve changed
+        # Store SDK type for this encoding
+        if encoding_section.get("sdk_type") != sdk_type:
+            encoding_section["sdk_type"] = sdk_type
+            self._dirty = True
+        # Now write the main_circuit_resources if they've changed
         if encoding_section.get("main_circuit_resources") != resources:
             encoding_section["main_circuit_resources"] = dict(resources)
             self._dirty = True

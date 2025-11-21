@@ -17,7 +17,7 @@ class ExactCoverEncoding:
     Both standard Sudoku (3x3+ subgrids) and 2x2 mini-Sudoku are supported with
     specialized constraint generation methods.
 
-    :ivar int size: Size of the Sudoku subgrid (e.g., 3 for 9x9 Sudoku).
+    :ivar int subgrid_size: Size of the Sudoku subgrid (e.g., 3 for 9x9 Sudoku).
     :ivar list[tuple[int,int,int]] open_tuples: Available cell-digit possibilities
         from the puzzle as ``(row, col, digit)`` tuples.
     :ivar list[tuple[int,int,int]] set_tuples: Pre-filled cells from the puzzle
@@ -43,7 +43,11 @@ class ExactCoverEncoding:
             print(f"Simple subsets: {len(encoding.simple_subsets)}")
             print(f"Pattern subsets: {len(encoding.pattern_subsets)}")
 
-    TODO: Include references to relevant literature.
+    Note:
+        Pattern encoding strategy is due to Weiß, Maximilian. 2022. 
+        Encoding strategies to solve Sudoku with Quantum Computers. 
+        Bachelorarbeit, Institut für Informatik, Ludwig-Maximilians-Universität München. 
+        Submitted 19 July 2022. Available at: https://elib.dlr.de/193653/1/Abgabe_weiss22.pdf
     """
     def __init__(self, puzzle):
         """Initialize the exact cover encoding for a given Sudoku puzzle.
@@ -65,18 +69,28 @@ class ExactCoverEncoding:
             constraint set without subgrid constraints due to overlap with
             row/column constraints.
         """
-        self.size = puzzle.subgrid_size
+        self.subgrid_size = puzzle.subgrid_size
         self.open_tuples = puzzle.open_tuples
         self.set_tuples = puzzle.pre_tuples
 
-        self.simple_subsets = self.gen_simple_subsets()
-        possible_patterns = PatternGeneration(puzzle=puzzle)
-        self.pattern_subsets = self.gen_patterns_subsets(possible_patterns=possible_patterns.patterns,fixed_tuples=self.set_tuples)
-        
-        if self.size >= 2:    
+        # Subset and universe generation differs for 2x2 (subgrid_size=1) special case
+        if self.subgrid_size >= 2:
+            self.simple_subsets = self.gen_simple_subsets()
+            possible_patterns = PatternGeneration(puzzle=puzzle)
+            self.pattern_subsets = self.gen_patterns_subsets(
+                possible_patterns=possible_patterns.patterns,
+                fixed_tuples=self.set_tuples
+            )
             self.universe = []
             self.gen_universe()
         else:
+            # 2x2 uses reduced constraint set (no subgrid constraints) and matching subsets
+            self.simple_subsets = self.gen_simple_subsets2x2()
+            possible_patterns = PatternGeneration(puzzle=puzzle)
+            self.pattern_subsets = self.gen_patterns_subsets2x2(
+                possible_patterns=possible_patterns.patterns,
+                fixed_tuples=self.set_tuples
+            )
             self.universe2x2 = []
             self.gen_universe2x2()
             
@@ -153,8 +167,8 @@ class ExactCoverEncoding:
         _subgrid_constraints = set()
         for tup in self.open_tuples:
             i, j, value = tup
-            subgrid_row_start = (i // self.size) * self.size
-            subgrid_col_start = (j // self.size) * self.size
+            subgrid_row_start = (i // self.subgrid_size) * self.subgrid_size
+            subgrid_col_start = (j // self.subgrid_size) * self.subgrid_size
             _subgrid_constraint = ('subgrid', subgrid_row_start, subgrid_col_start, value)
             _subgrid_constraints.add(_subgrid_constraint)
         return list(_subgrid_constraints)
@@ -211,7 +225,7 @@ class ExactCoverEncoding:
             cell = (x, y)
             row = ('row', x, z)
             col = ('col', y, z)
-            subgrid = ('subgrid', (x // self.size) * self.size, (y // self.size) * self.size, z)
+            subgrid = ('subgrid', (x // self.subgrid_size) * self.subgrid_size, (y // self.subgrid_size) * self.subgrid_size, z)
             key = f'S_{i}'
             subsets[key].append(cell)
             subsets[key].append(row)
@@ -224,7 +238,7 @@ class ExactCoverEncoding:
         """Generate pattern-based subsets for the exact cover problem.
         
         Creates subsets based on complete row patterns for each digit, potentially
-        reducing the size of the exact cover problem. Each subset represents a
+        reducing the subgrid_size of the exact cover problem. Each subset represents a
         valid way to place all instances of a specific digit across the entire
         puzzle, following Sudoku constraints.
         
@@ -243,7 +257,7 @@ class ExactCoverEncoding:
                 pattern.
                 
         Note:
-            This encoding can significantly reduce the problem size by considering
+            This encoding can significantly reduce the problem subgrid_size by considering
             complete placements of each digit rather than individual cell assignments.
             Cells that are already filled (fixed_tuples) are omitted to prevent
             constraint conflicts.
@@ -266,7 +280,7 @@ class ExactCoverEncoding:
                         subsets[key].append(row)
                         col_item = ('col', b, digit)
                         subsets[key].append(col_item)
-                        subgrid = ('subgrid', (a // self.size) * self.size, (b // self.size) * self.size, digit)
+                        subgrid = ('subgrid', (a // self.subgrid_size) * self.subgrid_size, (b // self.subgrid_size) * self.subgrid_size, digit)
                         subsets[key].append(subgrid)
                 i += 1
         return dict(subsets)
@@ -344,8 +358,7 @@ class ExactCoverEncoding:
                 
         Note:
             This is the 2x2 version of gen_patterns_subsets() without subgrid
-            constraints. The simplified constraint structure reflects the special
-            properties of 2x2 Sudoku puzzles.
+            constraints.
         """
         omitted_tuples = defaultdict(list)
         for tup in fixed_tuples:

@@ -28,7 +28,14 @@ class ExactCoverQuantumSolver(QuantumSolver):
                     
         # Initialize encoding
         enc = ExactCoverEncoding(puzzle)
-        self.universe = universe if universe is not None else enc.universe
+        if universe is not None:
+            self.universe = universe
+        else:
+            # Select correct universe depending on puzzle size
+            if hasattr(enc, 'universe'):
+                self.universe = enc.universe
+            else:
+                self.universe = enc.universe2x2
         
         # Determine which encoding to use
         if encoding == "simple":
@@ -105,3 +112,38 @@ class ExactCoverQuantumSolver(QuantumSolver):
             "n_gates": total_gates,
             "depth": None  # Depth is not calculated here
         }
+
+    def _is_valid_solution(self, bitstring: str) -> bool:
+        """Check if a bitstring represents a valid exact cover solution.
+        
+        A bitstring is valid if the subsets it selects cover all universe 
+        elements exactly once. Each bit position corresponds to a subset,
+        where '1' means the subset is selected.
+        
+        Args:
+            bitstring (str): Binary string where bit i indicates whether 
+                subset S_i is selected (MSB is S_0 in standard Qiskit ordering).
+        
+        Returns:
+            bool: True if the selected subsets form a valid exact cover.
+        
+        Example:
+            For bitstring "110", subsets S_0 and S_1 are selected.
+            Valid if S_0 ∪ S_1 covers all universe elements exactly once.
+        """
+        # Convert bitstring to selected subset indices
+        # Qiskit uses big-endian: leftmost bit is qubit 0
+        selected_indices = [i for i, bit in enumerate(bitstring) if bit == '1']
+        
+        # Collect all universe elements covered by selected subsets
+        covered_elements = []
+        for idx in selected_indices:
+            subset_key = f'S_{idx}'
+            if subset_key in self.subsets:
+                covered_elements.extend(self.subsets[subset_key])
+        
+        # Check two conditions:
+        # 1. Each element appears exactly once (no duplicates)
+        # 2. All universe elements are covered
+        return (len(covered_elements) == len(set(covered_elements)) and 
+                set(covered_elements) == set(self.universe))

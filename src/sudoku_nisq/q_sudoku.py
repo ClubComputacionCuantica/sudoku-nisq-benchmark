@@ -1,4 +1,5 @@
 import gc
+import math
 from typing import List, Dict, Any, Optional, Type, TYPE_CHECKING
 from pathlib import Path
 
@@ -86,7 +87,15 @@ class QSudoku():
         )
     
     @classmethod
-    def generate(cls, subgrid_size: int, num_missing_cells: int, canonicalize: bool = False, cache_base: Optional[str] = None) -> "QSudoku":
+    def generate(
+        cls,
+        subgrid_size: int = 3,
+        num_missing_cells: int = 20,
+        canonicalize: bool = False,
+        cache_base: Optional[str] = None,
+        *,
+        size: Optional[int] = None,
+    ) -> "QSudoku":
         """Factory method for generating a QSudoku instance with a random puzzle.
         
         Creates a new QSudoku instance by generating a random Sudoku puzzle with
@@ -94,9 +103,8 @@ class QSudoku():
         for quantum algorithm research and benchmarking.
         
         Args:
-            subgrid_size (int): Size of the subgrid (e.g., 3 for standard 9x9 Sudoku,
-                2 for 4x4 mini-Sudoku). Determines the overall board size as
-                subgrid_size².
+            subgrid_size (int): Backward-compatible subgrid dimension k (e.g., 3 for standard 9x9,
+                2 for 4x4). Determines overall board size as k² when ``size`` is not provided.
             num_missing_cells (int): Number of cells to leave empty in the generated
                 puzzle. Higher values create more challenging puzzles but may affect
                 quantum algorithm performance.
@@ -104,6 +112,11 @@ class QSudoku():
                 relabeling digits to ensure a standard form. Defaults to False.
             cache_base (Optional[str]): Base directory for caching quantum circuits
                 and metadata. If None, uses default cache location.
+            size (Optional[int]): New optional overall grid size N. If provided,
+                the generator targets an N×N puzzle. Supported values: 2 (special case,
+                no real subgrids) or perfect squares like 4, 9, 16 (with subgrids of
+                size sqrt(N)). If both ``size`` and ``subgrid_size`` are given, ``size``
+                takes precedence and must be consistent when applicable.
                 
         Returns:
             QSudoku: A new QSudoku instance with the generated puzzle ready for
@@ -113,7 +126,7 @@ class QSudoku():
             .. code-block:: python
 
                 # Generate standard 9x9 Sudoku with 20 missing cells
-                puzzle = QSudoku.generate(subgrid_size=3, num_missing_cells=20)
+                puzzle = QSudoku.generate(size=9, num_missing_cells=20)
 
                 # Generate challenging 9x9 puzzle with canonicalization
                 hard_puzzle = QSudoku.generate(
@@ -124,10 +137,28 @@ class QSudoku():
                 )
 
                 # Generate 4x4 mini-Sudoku for testing
-                mini_puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=8)
+                mini_puzzle = QSudoku.generate(size=4, num_missing_cells=8)
         """
-        # Generate the puzzle using SudokuPuzzle
-        puzzle = SudokuPuzzle.generate(subgrid_size=subgrid_size, num_missing_cells=num_missing_cells, canonicalize=canonicalize)
+        # Map overall size N to subgrid_size k when provided.
+        # Special-case N=2 -> k=1 (no real subgrids); otherwise require N to be a perfect square.
+        if size is not None:
+            if size == 2:
+                k = 1
+            else:
+                k = math.isqrt(size)
+                if k * k != size:
+                    raise ValueError(f"size must be 2 or a perfect square (e.g., 4, 9, 16); got {size}")
+            if subgrid_size is not None and subgrid_size != k:
+                # Enforce consistency if caller also provided subgrid_size
+                subgrid_size = k
+
+        # Generate the puzzle using SudokuPuzzle (supports optional size)
+        puzzle = SudokuPuzzle.generate(
+            subgrid_size=subgrid_size,
+            num_missing_cells=num_missing_cells,
+            canonicalize=canonicalize,
+            size=size,
+        )
 
         # Wrap the puzzle in a QSudoku instance
         return cls(puzzle=puzzle, cache_base=cache_base)
@@ -446,29 +477,48 @@ class QSudoku():
             gc.collect()
         self._solver = new_solver
     
-    def build_circuit(self):
+    def build_circuit(self, sdk: str | None = None):
         """Build the main quantum circuit using the active solver.
         
         Constructs the quantum circuit that implements the selected solving algorithm
         for the current puzzle. The circuit is built according to the solver's
         encoding strategy and algorithm parameters.
         
+        Args:
+            sdk (str | None, optional): Explicitly select which SDK to use for circuit
+                construction. Valid values are 'pytket', 'qiskit', or 'braket'.
+                If None (default), SDK selection follows this priority:
+                1. Use the backend's provider SDK if a backend was initialized
+                2. Default to PyTKET if no backend is available
+                This allows SDK comparison, testing without backends, and research workflows.
+        
         Returns:
-            Circuit: A pytket Circuit object ready for transpilation and execution.
+            Circuit: A quantum circuit object in the format of the selected SDK
+                (pytket.Circuit, qiskit.QuantumCircuit, or braket.circuits.Circuit).
             
         Raises:
-            ValueError: If no solver has been set using set_solver().
+            ValueError: If no solver has been set using set_solver(), or if an invalid
+                SDK name is provided.
             
-        Example:
+        Examples:
             .. code-block:: python
 
+                # Default: automatic SDK selection based on backend
                 puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
                 circuit = puzzle.build_circuit()
-                print(f"Circuit has {circuit.n_qubits} qubits and {circuit.n_gates} gates")
+                
+                # Explicit SDK selection (no backend needed)
+                qiskit_circuit = puzzle.build_circuit(sdk="qiskit")
+                pytket_circuit = puzzle.build_circuit(sdk="pytket")
+                
+                # Override backend's SDK for comparison
+                puzzle.initialize_ibm(token="...")
+                qiskit_circ = puzzle.build_circuit(sdk="qiskit")  # Use IBM's default
+                pytket_circ = puzzle.build_circuit(sdk="pytket")  # Compare with PyTKET
         """
         if not self._solver:
             raise ValueError("No solver set. Call set_solver() first.")
-        return self._solver.build_main_circuit()
+        return self._solver.build_main_circuit(sdk=sdk)
     
     def draw_circuit(self, circuit = None):
         """Visualize the quantum circuit using matplotlib rendering.

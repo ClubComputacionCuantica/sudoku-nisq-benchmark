@@ -24,8 +24,10 @@ class PatternGeneration:
         """
         self.open_tuples = puzzle.open_tuples
         self.fixed_tuples = puzzle.pre_tuples
-        size = puzzle.subgrid_size
-        self.length = size * size
+        # Use full board size (N) rather than subgrid_size**2.
+        # For standard puzzles N == subgrid_size**2, but for the 2x2 special case
+        # we have N=2 while subgrid_size=1. Using board_size avoids length=1 errors.
+        self.length = puzzle.board_size
         self.patterns = self.generate_patterns_dict()
         self.patterns = self.pattern_cleanup()
 

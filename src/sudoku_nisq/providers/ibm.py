@@ -13,6 +13,11 @@ class IBMProvider(QuantumProvider):
     def provider_name(self) -> str:
         return "ibm"
     
+    @property
+    def sdk_type(self) -> str:
+        """IBM Quantum uses Qiskit SDK."""
+        return "qiskit"
+    
     def authenticate(
         self,
         api_token: str,

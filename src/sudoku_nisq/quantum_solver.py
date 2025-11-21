@@ -88,13 +88,35 @@ class QuantumSolver(ABC):
         """
         pass
     
-    def _build_circuit(self, backend: Any = None) -> Any:
-        """Construct quantum circuit with automatic SDK detection.
+    def _build_circuit(self, backend: Any = None, sdk: str | None = None) -> Any:
+        """Construct quantum circuit with automatic or explicit SDK selection.
         
         This method handles SDK detection and delegates to the abstract
         _build_sdk_circuit method that subclasses must implement.
+        
+        Args:
+            backend (Any, optional): Backend instance for automatic SDK detection.
+            sdk (str | None, optional): Explicit SDK selection ('pytket', 'qiskit', 'braket').
+                If provided, overrides automatic backend-based detection.
+                
+        Returns:
+            Any: Quantum circuit in the format of the selected SDK.
+            
+        Raises:
+            ValueError: If sdk parameter specifies an invalid SDK name.
         """
-        sdk_type = self._detect_backend_sdk(backend)
+        if sdk is not None:
+            # Explicit SDK selection - validate the value
+            valid_sdks = ('pytket', 'qiskit', 'braket')
+            if sdk not in valid_sdks:
+                raise ValueError(
+                    f"Invalid SDK '{sdk}'. Must be one of {valid_sdks}"
+                )
+            sdk_type = sdk
+        else:
+            # Automatic detection based on backend
+            sdk_type = self._detect_backend_sdk(backend)
+        
         return self._build_sdk_circuit(sdk_type)
     
     @abstractmethod
@@ -182,7 +204,7 @@ class QuantumSolver(ABC):
         """
         return self.cache_root / backend_alias / f"opt{opt_level}_circuit.json"
 
-    def build_main_circuit(self, backend: Any = None, force_overwrite: bool = False, flatten: bool = True) -> Any:
+    def build_main_circuit(self, backend: Any = None, sdk: str | None = None, force_overwrite: bool = False, flatten: bool = True) -> Any:
         """Load or build the main quantum circuit for the solving algorithm.
         
         Manages circuit caching by loading from disk if available, or building a new
@@ -192,7 +214,11 @@ class QuantumSolver(ABC):
         
         Args:
             backend (Any, optional): Backend instance that determines which SDK to use.
-                If provided, the circuit will be built using the backend's native SDK.
+                If None (default), uses PyTKET for general-purpose circuit building.
+                If provided, uses the backend's provider-specific SDK (IBM→Qiskit, etc.).
+            sdk (str | None, optional): Explicitly select which SDK to use ('pytket', 'qiskit', 'braket').
+                If provided, overrides automatic backend-based SDK detection.
+                Enables SDK comparison and testing without backend initialization.
             force_overwrite (bool, optional): If True, rebuilds the circuit even if
                 a cached version exists. Defaults to False.
             flatten (bool, optional): If True, applies register flattening for
@@ -200,23 +226,32 @@ class QuantumSolver(ABC):
                 
         Returns:
             Any: The main quantum circuit ready for transpilation and execution,
-                in the format appropriate for the backend (pytket.Circuit, qiskit.QuantumCircuit, etc.).
+                in the format appropriate for the selected SDK (pytket.Circuit, qiskit.QuantumCircuit, etc.).
+            
+        Raises:
+            ValueError: If sdk parameter specifies an invalid SDK name.
             
         Side Effects:
             - Sets self.main_circuit to the built/loaded circuit
             - Saves circuit to disk cache if newly built (pytket format for compatibility)
-            - Updates metadata with circuit resource metrics
+            - Updates metadata with circuit resource metrics (including SDK type)
             - Persists metadata to disk
         """
         path = self.main_circuit_path
-        if path.exists() and not force_overwrite:
+        
+        # Determine target SDK (explicit or auto-detected)
+        target_sdk = sdk if sdk is not None else self._detect_backend_sdk(backend)
+        
+        # Only use cache if: (1) cache exists, (2) not forcing rebuild, and (3) no explicit SDK override
+        # When explicit SDK is provided, always rebuild to ensure correct SDK format
+        if path.exists() and not force_overwrite and sdk is None:
             circ = self.load_circuit(path)
         else:
-            # Delegate to the subclass with backend context
-            circ = self._build_circuit(backend)
+            # Delegate to the subclass with backend context and explicit SDK selection
+            circ = self._build_circuit(backend, sdk=sdk)
             
             # For caching and metadata, convert to pytket format if needed
-            cache_circuit = self._ensure_pytket_format(circ, backend)
+            cache_circuit = self._ensure_pytket_format(circ, sdk_type=target_sdk)
             
             # Flatten registers for compatibility with generic backends (pytket specific)
             if flatten and hasattr(cache_circuit, 'n_qubits'):  # pytket circuit
@@ -227,7 +262,9 @@ class QuantumSolver(ABC):
             
             # Record main circuit resources using pytket format for consistency
             main_res = self._get_circuit_resources(cache_circuit)
-            self._metadata.set_main_circuit_resources(self.solver_name, self.encoding, main_res)
+            
+            # Track SDK type in metadata (explicit selection or auto-detected)
+            self._metadata.set_main_circuit_resources(self.solver_name, self.encoding, main_res, sdk_type=target_sdk)
             self._metadata.save()
 
         self.main_circuit = circ
@@ -236,14 +273,17 @@ class QuantumSolver(ABC):
     def _detect_backend_sdk(self, backend: Any) -> str:
         """Detect which SDK the backend uses based on its interface.
         
+        When no backend is provided (backend=None), defaults to PyTKET as the
+        most versatile SDK with broad compatibility.
+        
         Args:
-            backend: The backend instance to analyze
+            backend: The backend instance to analyze, or None for default
             
         Returns:
             str: SDK name ("pytket", "qiskit", "braket")
         """
         if backend is None:
-            return "pytket"  # Default fallback
+            return "pytket"  # Default: PyTKET for general-purpose usage
             
         # Check for pytket backend characteristics
         if hasattr(backend, 'get_compiled_circuit') and hasattr(backend, 'process_circuit'):
@@ -261,12 +301,13 @@ class QuantumSolver(ABC):
             # Default to pytket for unknown backends
             return "pytket"
 
-    def _ensure_pytket_format(self, circuit: Any, backend: Any = None) -> Circuit:
+    def _ensure_pytket_format(self, circuit: Any, sdk_type: str | None = None, backend: Any = None) -> Circuit:
         """Convert circuit to pytket format for caching and metadata consistency.
         
         Args:
             circuit: Circuit in any SDK format
-            backend: Backend context (optional)
+            sdk_type: Explicit SDK type ('pytket', 'qiskit', 'braket')
+            backend: Backend context (optional, used if sdk_type not provided)
             
         Returns:
             Circuit: Circuit converted to pytket format
@@ -274,8 +315,10 @@ class QuantumSolver(ABC):
         # If already pytket, return as-is
         if hasattr(circuit, 'n_qubits') and hasattr(circuit, 'n_gates'):
             return circuit
-            
-        sdk_type = self._detect_backend_sdk(backend)
+        
+        # Determine SDK type
+        if sdk_type is None:
+            sdk_type = self._detect_backend_sdk(backend)
         
         if sdk_type == "qiskit":
             # Convert qiskit to pytket
@@ -485,13 +528,19 @@ class QuantumSolver(ABC):
         backend_alias: str,
         shots: int = 1024,
         force_run: bool = False,
-        optimisation_level: int = 1
+        optimisation_level: int = 1,
+        use_zne: bool = False,
+        use_pec: bool = False,
+        zne_scale_noise: Any = None,
+        zne_factory: Any = None,
+        pec_representations: Any = None,
     ):
         """Run the transpiled circuit on the specified quantum backend.
         
         Executes the quantum circuit on the provided backend after transpilation.
         Handles circuit caching and ensures type safety throughout execution.
         The circuit is automatically built and transpiled if not already available.
+        Optionally applies error mitigation via ZNE or PEC.
 
         Args:
             backend (Any): The pytket backend instance to execute on.
@@ -503,6 +552,19 @@ class QuantumSolver(ABC):
                 even if cached transpiled circuit exists. Defaults to False.
             optimisation_level (int, optional): Optimization level for circuit
                 transpilation. Higher levels may reduce gate count. Defaults to 1.
+            use_zne (bool, optional): Enable Zero Noise Extrapolation error mitigation.
+                Defaults to False.
+            use_pec (bool, optional): Enable Probabilistic Error Cancellation mitigation.
+                Defaults to False.
+            zne_scale_noise (Callable, optional): Noise scaling function for ZNE.
+                If None, uses Mitiq's default folding strategy.
+                TODO: Make configurable per backend noise characteristics.
+            zne_factory (Any, optional): Extrapolation factory for ZNE.
+                If None, uses Richardson extrapolation with default polynomial degree.
+                TODO: Support LinearFactory, RichardsonFactory, etc. via config.
+            pec_representations (Any, optional): OperationRepresentation list for PEC.
+                Required if use_pec=True. Maps ideal gates to noisy implementations.
+                TODO: Auto-generate from backend calibration data.
         
         TODO:
             Align external naming with QSudoku.run which uses ``opt_level``.
@@ -510,10 +572,14 @@ class QuantumSolver(ABC):
 
         Returns:
             Any: Result object from backend execution containing measurement
-                outcomes and job metadata.
+                outcomes and job metadata. If mitigation is enabled, result
+                contains additional `_mitigated_success_prob` attribute.
                 
         Raises:
             TypeError: If the compiled circuit is not a valid Circuit instance.
+            ImportError: If use_zne or use_pec is True but Mitiq is not installed.
+            ValueError: If use_pec is True but pec_representations is None,
+                or if both use_zne and use_pec are True.
         """
         
         # Ensure main circuit is built with backend context
@@ -534,6 +600,54 @@ class QuantumSolver(ABC):
         # Guarantee type safety
         if not isinstance(compiled_circuit, Circuit):
             raise TypeError(f"Expected Circuit, got {type(compiled_circuit)}")
+        
+        # Apply error mitigation if requested
+        if use_zne or use_pec:
+            from sudoku_nisq.mitigation.executors import apply_zne, apply_pec
+            
+            if use_zne and use_pec:
+                # TODO: Support combining ZNE and PEC (apply sequentially)
+                raise ValueError("Cannot use both ZNE and PEC simultaneously. Choose one.")
+            
+            if use_zne:
+                mitigated_expectation = apply_zne(
+                    compiled_circuit,
+                    backend,
+                    self,
+                    shots=shots,
+                    scale_noise=zne_scale_noise,
+                    factory=zne_factory,
+                )
+                # Still run standard execution for full result object
+                handle = backend.process_circuit(compiled_circuit, n_shots=shots)
+                result = backend.get_result(handle)
+                # Attach mitigated value as metadata
+                if hasattr(result, '__dict__'):
+                    result._mitigated_success_prob = mitigated_expectation
+                return result
+            
+            if use_pec:
+                if pec_representations is None:
+                    raise ValueError(
+                        "PEC requires 'pec_representations' parameter. "
+                        "See Mitiq documentation for OperationRepresentation generation."
+                    )
+                mitigated_expectation = apply_pec(
+                    compiled_circuit,
+                    backend,
+                    self,
+                    pec_representations,
+                    shots=shots,
+                )
+                # Standard execution
+                handle = backend.process_circuit(compiled_circuit, n_shots=shots)
+                result = backend.get_result(handle)
+                # Attach mitigated value
+                if hasattr(result, '__dict__'):
+                    result._mitigated_success_prob = mitigated_expectation
+                return result
+        
+        # Standard execution (no mitigation)
         handle = backend.process_circuit(compiled_circuit, n_shots=shots)  # type: ignore[arg-type]
         result = backend.get_result(handle)
         return result

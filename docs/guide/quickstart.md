@@ -7,7 +7,7 @@ from sudoku_nisq.q_sudoku import QSudoku
 from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
 
 # 1) Create a 9x9 puzzle (~20 blanks)
-puzzle = QSudoku.generate(subgrid_size=3, num_missing_cells=20)
+puzzle = QSudoku.generate(size=9, num_missing_cells=20) # size = n for nxn grid
 
 # 2) Choose a solver
 puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
@@ -34,6 +34,7 @@ print("summary keys:", summary.keys())
 ```
 
 ```{note}
+- For 2x2 puzzles with no real subgrids, use `QSudoku.generate(size=2, ...)`.
 - For Quantinuum via TKET, see `QSudoku.init_quantinuum(...)`.
 - The docs mock SDKs during build; you’ll need the real SDKs for execution.
 ```

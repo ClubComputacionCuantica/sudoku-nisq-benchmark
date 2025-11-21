@@ -12,6 +12,12 @@ import os
 import sys
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
+import inspect
+
+# Repository settings for linkcode
+_GITHUB_USER = "ClubComputacionCuantica"
+_GITHUB_REPO = "sudoku-nisq-benchmark"
+_GITHUB_BRANCH = os.environ.get("DOCS_GIT_REF", "dev")  # switch to main/releases later
 
 # Ensure src is on path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
@@ -92,16 +98,54 @@ def setup(app):  # noqa: D401
 
 
 def linkcode_resolve(domain, info):  # noqa: D401
-    """Resolve source links to GitHub for API pages.
+    """Return GitHub URL for a given Python object.
 
-    TODO: Implement mapping to the repository/branch/tag once stable.
-    See https://www.sphinx-doc.org/en/master/usage/extensions/linkcode.html
+    Provides deep links to source on the current development branch.
+    Later we can pin to a tag or commit for released versions.
     """
-    return None
+    if domain != 'py':
+        return None
+    module_name = info.get('module')
+    fullname = info.get('fullname')
+    if not module_name:
+        return None
+    try:
+        module = __import__(module_name, fromlist=[''])
+    except Exception:
+        return None
+    obj = module
+    for part in (fullname or '').split('.'):
+        if not part:
+            continue
+        try:
+            obj = getattr(obj, part)
+        except AttributeError:
+            return None
+    try:
+        fn = inspect.getsourcefile(obj)
+        if fn is None:
+            return None
+        fn = os.path.relpath(fn, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+        source, lineno = inspect.getsourcelines(obj)
+    except Exception:
+        return None
+    end_line = lineno + len(source) - 1
+    return (
+        f"https://github.com/{_GITHUB_USER}/{_GITHUB_REPO}/blob/{_GITHUB_BRANCH}/" +
+        f"{fn}#L{lineno}-L{end_line}"
+    )
 
 html_theme = 'furo'  # modern theme; switch if desired
 html_title = project
 html_last_updated_fmt = '%Y-%m-%d'
+html_baseurl = 'https://ClubComputacionCuantica.github.io/sudoku-nisq-benchmark/'
+html_meta = {
+    # TEMPORARY: block indexing until docs are finalized.
+    'robots': 'noindex, nofollow'
+}
+
+# TEMPORARY safeguard: ensure robots.txt copied into build output
+html_extra_path = ['robots.txt']
 
 # Mock heavy/optional dependencies during autodoc to keep builds light
 autodoc_mock_imports = [

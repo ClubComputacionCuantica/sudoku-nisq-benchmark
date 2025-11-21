@@ -15,6 +15,11 @@ class QuantinuumProvider(QuantumProvider):
     def provider_name(self) -> str:
         return "quantinuum"
     
+    @property
+    def sdk_type(self) -> str:
+        """Quantinuum uses PyTKET SDK."""
+        return "pytket"
+    
     def authenticate(self, **kwargs) -> List[str]:
         """Placeholder: Authenticate with Quantinuum and discover available devices.
         

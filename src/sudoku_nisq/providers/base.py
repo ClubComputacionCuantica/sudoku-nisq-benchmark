@@ -22,6 +22,12 @@ class QuantumProvider(ABC):
         """Name of the provider (e.g., 'ibm', 'quantinuum')."""
         pass
     
+    @property
+    @abstractmethod
+    def sdk_type(self) -> str:
+        """SDK used by this provider ('qiskit', 'pytket', 'braket')."""
+        pass
+    
     @abstractmethod
     def authenticate(self, **kwargs) -> List[str]:
         """Authenticate with the provider and return available devices."""

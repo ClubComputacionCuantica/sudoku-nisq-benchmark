@@ -1,0 +1,3 @@
+# Temporary robots.txt to prevent indexing before public launch
+User-agent: *
+Disallow: /

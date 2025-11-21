@@ -42,8 +42,8 @@ class SudokuPuzzle:
             SudokuPuzzle: A new SudokuPuzzle instance with calculated properties
                 including subgrid size, board size, and missing cell count.
         """
-        subgrid_size = int(math.isqrt(len(board)))
-        board_size = subgrid_size * subgrid_size
+        board_size = len(board)
+        subgrid_size = int(math.isqrt(board_size))
         num_missing_cells = sum(1 for row in board for cell in row if cell == 0 or cell is None)
 
         if canonicalize:
@@ -58,7 +58,14 @@ class SudokuPuzzle:
         )
 
     @classmethod
-    def generate(cls, subgrid_size: int, num_missing_cells: int, canonicalize: bool = False) -> "SudokuPuzzle":
+    def generate(
+        cls,
+        subgrid_size: int,
+        num_missing_cells: int,
+        canonicalize: bool = False,
+        *,
+        size: Optional[int] = None,
+    ) -> "SudokuPuzzle":
         """Generates a new random Sudoku puzzle with specified parameters.
 
         Creates a complete Sudoku puzzle and then removes the specified number
@@ -67,17 +74,31 @@ class SudokuPuzzle:
 
         Args:
             subgrid_size (int): Size of each subgrid (e.g., 3 for a 9x9 Sudoku).
-                The total board size will be subgrid_size².
+                The total board size will be subgrid_size² when ``size`` is not provided.
             num_missing_cells (int): Number of cells to remove from the complete
                 puzzle to create the challenge.
             canonicalize (bool, optional): Whether to canonicalize the puzzle to
                 ensure standardized digit representation. Defaults to False.
+            size (Optional[int]): Overall board size N. If provided, supports N=2
+                (treated as subgrid_size=1, i.e., no real subgrids) or perfect squares
+                like 4, 9, 16 (subgrid_size=sqrt(N)).
 
         Returns:
             SudokuPuzzle: A new randomly generated SudokuPuzzle instance with
                 the specified difficulty level.
         """
-        board_size = subgrid_size * subgrid_size
+        if size is not None:
+            if size == 2:
+                board_size = 2
+                subgrid_size = 1
+            else:
+                k = int(math.isqrt(size))
+                if k * k != size:
+                    raise ValueError(f"size must be 2 or a perfect square (e.g., 4, 9, 16); got {size}")
+                subgrid_size = k
+                board_size = size
+        else:
+            board_size = subgrid_size * subgrid_size
         generator = SudokuGenerator(board_size=board_size)
         generator.generate(cells_to_remove=num_missing_cells)
         generator.board_exchange_values({'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5, 'f': 6, 'g': 7, 'h': 8, 'i': 9})
@@ -184,8 +205,8 @@ class SudokuPuzzle:
                 for each pre-filled cell. Coordinates are 0-indexed.
         """
         preset_tuples = []
-        for i in range(self.subgrid_size*self.subgrid_size):  # Loop over each row
-            for j in range(self.subgrid_size*self.subgrid_size):  # Loop over each column in the row
+        for i in range(self.board_size):  # Loop over each row
+            for j in range(self.board_size):  # Loop over each column in the row
                 element = self.board[i][j]
                 if element is not None: # Check if the cell is pre-filled
                     preset_tuples.append((i,j,element)) # Store pre-filled cell as tuple
@@ -205,17 +226,17 @@ class SudokuPuzzle:
                 cell may contribute multiple tuples if multiple digits are valid.
         """
         open_tuples = []
-        for i in range(self.subgrid_size*self.subgrid_size):  # Loop over each row
-            for j in range(self.subgrid_size*self.subgrid_size):  # Loop over each column in the row
+        for i in range(self.board_size):  # Loop over each row
+            for j in range(self.board_size):  # Loop over each column in the row
                 element = self.board[i][j]
                 if element is None or element == 0: # Check if the cell is empty
-                    digits = list(range(1, self.subgrid_size*self.subgrid_size +1)) # Possible digits for the cell
+                    digits = list(range(1, self.board_size + 1)) # Possible digits for the cell
                     # Discard digits based on the column constraint
-                    for p in range(self.subgrid_size*self.subgrid_size):
+                    for p in range(self.board_size):
                         if self.board[p][j] is not None and self.board[p][j] != 0 and self.board[p][j] in digits:
                             digits.remove(self.board[p][j])
                     # Discard digits based on the row constraint
-                    for q in range(self.subgrid_size*self.subgrid_size):
+                    for q in range(self.board_size):
                         if self.board[i][q] is not None and self.board[i][q] != 0 and self.board[i][q] in digits:
                             digits.remove(self.board[i][q])
                     # Discard digits based on the subfield
