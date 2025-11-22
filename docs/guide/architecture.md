@@ -83,7 +83,6 @@ backend = manager.get("ibm_dev")
 **Integration with infrastructure**:
 - **MetadataManager**: Tracks solver performance, caching, resource usage
 - **ExperimentRunner**: Orchestrates large-scale benchmarking campaigns with crash-safe progress tracking
-- **Error mitigation**: Optional ZNE/PEC via `sudoku_nisq.mitigation` (Mitiq integration)
 
 ## Dependencies
 
@@ -99,7 +98,7 @@ encodings  →  circuits  →  providers
 - **Circuits**: Depend on encoding outputs and SDK libraries only
 - **Providers**: Depend on SDK libraries (Qiskit, PyTKET, Braket)
 - **Solvers**: Orchestrate all layers + use infrastructure services
-- **Infrastructure**: `MetadataManager`, `ExperimentRunner`, mitigation modules support solvers
+- **Infrastructure**: `MetadataManager`, `ExperimentRunner` support solvers
 
 ## Public API
 
@@ -116,7 +115,6 @@ Core entry points from `sudoku_nisq/__init__.py`:
 2. **New circuit builder**: Add `sudoku_nisq.circuits.<problem>.<sdk>_impl.build_*_circuit(solver)` function
 3. **New provider**: Subclass `QuantumProvider`; implement abstract methods; register in `BackendManager.__init__()`
 4. **New solver**: Subclass `QuantumSolver`; implement `_build_sdk_circuit(sdk_type)` and `resource_estimation()`
-5. **New mitigation strategy**: Add executor in `sudoku_nisq.mitigation.executors`
 
 ## Current Status
 
@@ -127,13 +125,11 @@ Core entry points from `sudoku_nisq/__init__.py`:
 - ✅ Quantinuum provider (pending final testing)
 - ✅ `BackendManager` with unified multi-provider interface
 - ✅ Gate counting and resource estimation
-- ✅ ZNE error mitigation (Mitiq integration)
 - ✅ Crash-safe experiment runner with progress tracking
 
 **In Progress**:
 - 🔄 AWS Braket native circuit builder (currently uses PyTKET fallback)
 - 🔄 Quantinuum provider validation and testing
-- 🔄 PEC error mitigation refinement
 
 **Planned**:
 - 📋 Graph coloring encoding and circuit implementation

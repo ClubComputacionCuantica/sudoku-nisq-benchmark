@@ -27,7 +27,6 @@ See {doc}`guide/installation`.
 guide/installation
 guide/quickstart
 guide/getting-started
-guide/error_mitigation
 guide/examples
 guide/contributing
 guide/current-state
