@@ -5,6 +5,7 @@ from typing import Any
 from pytket import Circuit, OpType
 from pytket.utils import gate_counts
 from pytket.passes import FlattenRegisters
+from qiskit import QuantumCircuit
 
 from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
 from sudoku_nisq.metadata_manager import MetadataManager
@@ -31,8 +32,8 @@ class QuantumSolver(ABC):
 
     def __init__(
         self, 
-        puzzle: SudokuPuzzle,
-        metadata_manager: MetadataManager,
+        puzzle: SudokuPuzzle = None,
+        metadata_manager: MetadataManager = None,
         encoding: str | None = None, 
         store_transpiled: bool = True,
     ):
@@ -43,24 +44,17 @@ class QuantumSolver(ABC):
         This base class does not implement any solving algorithm itself.
 
         Args:
-            puzzle (SudokuPuzzle): The Sudoku puzzle instance to solve. Must not be None.
-            metadata_manager (MetadataManager): Instance for managing circuit metadata,
-                caching, and performance tracking. Must not be None.
+            puzzle (SudokuPuzzle, optional): The Sudoku puzzle instance to solve. 
+                Can be None for generic exact cover problems.
+            metadata_manager (MetadataManager, optional): Instance for managing circuit metadata,
+                caching, and performance tracking. Can be None for minimal usage.
             encoding (str, optional): Encoding strategy name for the quantum algorithm.
                 If None, defaults to "default".
             store_transpiled (bool, optional): Whether to save transpiled circuits to
                 disk for caching. Defaults to True for better performance on repeated runs.
-                
-        Raises:
-            ValueError: If puzzle or metadata_manager is None.
         """
         
-        if puzzle is None:
-            raise ValueError("A SudokuPuzzle instance is required.")
-        if metadata_manager is None:
-            raise ValueError("A MetadataManager instance is required.")
-        
-        # Sudoku integration for puzzle-specific caching
+        # Sudoku integration for puzzle-specific caching (optional for generic problems)
         self.puzzle = puzzle
         self._metadata = metadata_manager
         self.encoding = encoding or "default"  # Default encoding if not specified
@@ -69,8 +63,8 @@ class QuantumSolver(ABC):
         # Circuit management - now SDK-agnostic
         self.main_circuit: Any | None = None
         
-        # Cache base derived from metadata manager
-        self.cache_base = self._metadata.cache_base
+        # Cache base derived from metadata manager (if provided)
+        self.cache_base = self._metadata.cache_base if self._metadata else Path(".quantum_solver_cache")
         
     @abstractmethod
     def _build_sdk_circuit(self, sdk_type: str) -> Any:
@@ -182,8 +176,25 @@ class QuantumSolver(ABC):
     
     @property
     def puzzle_hash(self) -> str:
-        """str: Unique hash identifier for the current Sudoku puzzle."""
-        return self.puzzle.get_hash()
+        """str: Unique hash identifier for the current problem (Sudoku puzzle or generic exact cover)."""
+        if self.puzzle is not None:
+            return self.puzzle.get_hash()
+        elif hasattr(self, '_problem_hash'):
+            # For generic exact cover problems, use stored hash
+            return self._problem_hash
+        else:
+            # Fallback: generate hash from solver parameters
+            import hashlib
+            content = f"{self.solver_name}_{self.encoding}"
+            if hasattr(self, 'universe') and hasattr(self, 'subsets'):
+                # Hash the universe and subsets for generic problems
+                from sudoku_nisq.exact_cover_problem import ExactCoverProblem
+                temp_problem = ExactCoverProblem(
+                    universe=self.universe,
+                    subsets=self.subsets
+                )
+                return temp_problem.get_hash()
+            return hashlib.sha256(content.encode()).hexdigest()
 
     @property
     def solver_name(self) -> str:
@@ -359,6 +370,9 @@ class QuantumSolver(ABC):
         When no backend is provided (backend=None), defaults to PyTKET as the
         most versatile SDK with broad compatibility.
         
+        Now properly detects native Qiskit runtime backends from qiskit_ibm_runtime
+        and distinguishes them from PyTKET's IBMQBackend wrapper.
+        
         Args:
             backend: The backend instance to analyze, or None for default
             
@@ -367,18 +381,30 @@ class QuantumSolver(ABC):
         """
         if backend is None:
             return "pytket"  # Default: PyTKET for general-purpose usage
-            
-        # Check for pytket backend characteristics
+        
+        # Check backend module to identify native qiskit_ibm_runtime backends
+        backend_module = getattr(backend, '__module__', '')
+        
+        # Native Qiskit runtime backend (highest priority check)
+        if 'qiskit_ibm_runtime' in backend_module:
+            return "qiskit"
+        
+        # Check for braket backend characteristics BEFORE Qiskit checks
+        # (because Mock objects return True for hasattr on any attribute)
+        # Check both module and type string for braket
+        if 'braket' in backend_module.lower() or 'braket' in str(type(backend)).lower():
+            return "braket"
+        
+        # Check for pytket backend characteristics (includes IBMQBackend wrapper)
         if hasattr(backend, 'get_compiled_circuit') and hasattr(backend, 'process_circuit'):
             return "pytket"
         
-        # Check for qiskit backend characteristics  
-        elif hasattr(backend, 'transpile') or 'qiskit' in str(type(backend)).lower():
+        # Check for Qiskit backend characteristics (AerSimulator, legacy IBMQ, etc.)
+        # Use hasattr for 'target' which is present in modern Qiskit backends
+        if hasattr(backend, 'target') or hasattr(backend, 'configuration'):
             return "qiskit"
-            
-        # Check for braket backend characteristics
-        elif hasattr(backend, 'run') and 'braket' in str(type(backend)).lower():
-            return "braket"
+        elif 'qiskit' in str(type(backend)).lower():
+            return "qiskit"
             
         else:
             # Default to pytket for unknown backends
@@ -637,6 +663,50 @@ class QuantumSolver(ABC):
             
             return err
 
+    def _run_qiskit_native(
+        self,
+        backend: Any,
+        circuit: QuantumCircuit,
+        shots: int = 1024,
+    ) -> Any:
+        """Execute a Qiskit circuit on a native Qiskit backend.
+        
+        This method handles execution for native qiskit_ibm_runtime backends
+        that use backend.run() instead of pytket's process_circuit().
+        
+        Args:
+            backend: Native Qiskit runtime backend instance
+            circuit: Transpiled Qiskit QuantumCircuit
+            shots: Number of measurement shots
+            
+        Returns:
+            Job result object with counts and metadata
+        """
+        # Native Qiskit execution uses backend.run()
+        job = backend.run(circuit, shots=shots)
+        result = job.result()
+        return result
+    
+    def _run_pytket(
+        self,
+        backend: Any,
+        circuit: Circuit,
+        shots: int = 1024,
+    ) -> Any:
+        """Execute a pytket circuit on a pytket backend.
+        
+        Args:
+            backend: PyTKET backend instance
+            circuit: Transpiled pytket Circuit
+            shots: Number of measurement shots
+            
+        Returns:
+            Result object from backend execution
+        """
+        handle = backend.process_circuit(circuit, n_shots=shots)
+        result = backend.get_result(handle)
+        return result
+
     def run(
         self,
         backend: Any,
@@ -656,9 +726,12 @@ class QuantumSolver(ABC):
         Handles circuit caching and ensures type safety throughout execution.
         The circuit is automatically built and transpiled if not already available.
         Optionally applies error mitigation via ZNE or PEC.
+        
+        Now supports both PyTKET backends (using process_circuit) and native
+        Qiskit runtime backends (using backend.run()).
 
         Args:
-            backend (Any): The pytket backend instance to execute on.
+            backend (Any): The backend instance to execute on (PyTKET or native Qiskit).
             backend_alias (str): Human-readable alias of the backend used for
                 metadata tracking and logging purposes.
             shots (int, optional): Number of measurement shots for execution.
@@ -673,13 +746,10 @@ class QuantumSolver(ABC):
                 Defaults to False.
             zne_scale_noise (Callable, optional): Noise scaling function for ZNE.
                 If None, uses Mitiq's default folding strategy.
-                TODO: Make configurable per backend noise characteristics.
             zne_factory (Any, optional): Extrapolation factory for ZNE.
                 If None, uses Richardson extrapolation with default polynomial degree.
-                TODO: Support LinearFactory, RichardsonFactory, etc. via config.
             pec_representations (Any, optional): OperationRepresentation list for PEC.
                 Required if use_pec=True. Maps ideal gates to noisy implementations.
-                TODO: Auto-generate from backend calibration data.
         
         TODO:
             Align external naming with QSudoku.run which uses ``opt_level``.
@@ -691,7 +761,7 @@ class QuantumSolver(ABC):
                 contains additional `_mitigated_success_prob` attribute.
                 
         Raises:
-            TypeError: If the compiled circuit is not a valid Circuit instance.
+            TypeError: If the compiled circuit is not in the expected format.
             ImportError: If use_zne or use_pec is True but Mitiq is not installed.
             ValueError: If use_pec is True but pec_representations is None,
                 or if both use_zne and use_pec are True.
@@ -700,28 +770,49 @@ class QuantumSolver(ABC):
         # Ensure main circuit is built with backend context
         if self.main_circuit is None:
             self.build_main_circuit(backend)
-            
-        path = self.transpiled_circuit_path(backend_alias, optimisation_level)
         
+        # Detect backend SDK type
+        sdk_type = self._detect_backend_sdk(backend)
+        
+        # Get SDK-aware transpiled circuit path
+        path = self.transpiled_circuit_path(backend_alias, optimisation_level, sdk_type=sdk_type)
+        
+        # Load or transpile circuit
         if self.store_transpiled and path.exists() and not force_run:
-            compiled_circuit = self.load_circuit(path)
+            # Load from cache
+            if sdk_type == "qiskit":
+                compiled_circuit = self._load_qiskit_circuit(path)
+            else:  # pytket
+                compiled_circuit = self.load_circuit(path)
         else:
-            # Transpile
-            compiled_circuit = backend.get_compiled_circuit(self.main_circuit, optimisation_level=optimisation_level)
-            # Cache only if store_transpiled is True
+            # Transpile using SDK-specific method
+            if sdk_type == "pytket":
+                compiled_circuit = self._transpile_pytket(backend, optimisation_level)
+            elif sdk_type == "qiskit":
+                compiled_circuit = self._transpile_qiskit(backend, optimisation_level)
+            else:
+                raise ValueError(f"Unsupported SDK type for execution: {sdk_type}")
+            
+            # Cache if enabled
             if self.store_transpiled:
-                self.save_circuit(compiled_circuit, path)
+                if sdk_type == "qiskit":
+                    self._save_qiskit_circuit(compiled_circuit, path)
+                else:  # pytket
+                    self.save_circuit(compiled_circuit, path)
 
-        # Guarantee type safety
-        if not isinstance(compiled_circuit, Circuit):
-            raise TypeError(f"Expected Circuit, got {type(compiled_circuit)}")
+        # Type validation based on SDK
+        if sdk_type == "pytket":
+            if not isinstance(compiled_circuit, Circuit):
+                raise TypeError(f"Expected pytket Circuit, got {type(compiled_circuit)}")
+        elif sdk_type == "qiskit":
+            if not isinstance(compiled_circuit, QuantumCircuit):
+                raise TypeError(f"Expected Qiskit QuantumCircuit, got {type(compiled_circuit)}")
         
         # Apply error mitigation if requested
         if use_zne or use_pec:
             from sudoku_nisq.mitigation.executors import apply_zne, apply_pec
             
             if use_zne and use_pec:
-                # TODO: Support combining ZNE and PEC (apply sequentially)
                 raise ValueError("Cannot use both ZNE and PEC simultaneously. Choose one.")
             
             if use_zne:
@@ -733,9 +824,12 @@ class QuantumSolver(ABC):
                     scale_noise=zne_scale_noise,
                     factory=zne_factory,
                 )
-                # Still run standard execution for full result object
-                handle = backend.process_circuit(compiled_circuit, n_shots=shots)
-                result = backend.get_result(handle)
+                # Standard execution for full result
+                if sdk_type == "qiskit":
+                    result = self._run_qiskit_native(backend, compiled_circuit, shots)
+                else:  # pytket
+                    result = self._run_pytket(backend, compiled_circuit, shots)
+                
                 # Attach mitigated value as metadata
                 if hasattr(result, '__dict__'):
                     result._mitigated_success_prob = mitigated_expectation
@@ -755,49 +849,200 @@ class QuantumSolver(ABC):
                     shots=shots,
                 )
                 # Standard execution
-                handle = backend.process_circuit(compiled_circuit, n_shots=shots)
-                result = backend.get_result(handle)
+                if sdk_type == "qiskit":
+                    result = self._run_qiskit_native(backend, compiled_circuit, shots)
+                else:  # pytket
+                    result = self._run_pytket(backend, compiled_circuit, shots)
+                
                 # Attach mitigated value
                 if hasattr(result, '__dict__'):
                     result._mitigated_success_prob = mitigated_expectation
                 return result
         
         # Standard execution (no mitigation)
-        handle = backend.process_circuit(compiled_circuit, n_shots=shots)  # type: ignore[arg-type]
-        result = backend.get_result(handle)
-        return result
+        if sdk_type == "qiskit":
+            return self._run_qiskit_native(backend, compiled_circuit, shots)
+        else:  # pytket
+            return self._run_pytket(backend, compiled_circuit, shots)
     
-    def run_aer(self, shots: int = 1024, **kwargs) -> Any:
-        """Run the main circuit on the local Aer simulator.
+    def run_aer(
+        self, 
+        shots: int = 1024,
+        method: str = "automatic",
+        noise_model: Any = None,
+        coupling_map: Any = None,
+        basis_gates: list[str] | None = None,
+        device: str = "CPU",
+        precision: str = "double",
+        optimization_level: int = 1,
+        seed_simulator: int | None = None,
+        max_parallel_threads: int | None = None,
+        max_parallel_experiments: int | None = None,
+        blocking_enable: bool = True,
+        blocking_qubits: int = 5,
+        **backend_options
+    ) -> Any:
+        """Run the main circuit on Qiskit Aer simulator with full configuration support.
         
-        Executes the logical quantum circuit on the Qiskit Aer simulator via
-        pytket's AerBackend without hardware-specific transpilation. By default
-        this runs an ideal (noise-free) simulation; however, Aer supports noise
-        models and additional configuration which can be enabled separately.
+        Executes the quantum circuit using native Qiskit Aer with comprehensive
+        control over simulation method, noise models, device selection, and performance
+        options. Supports ideal and noisy simulation, multiple simulation methods
+        (statevector, density_matrix, MPS, etc.), and GPU acceleration when available.
         
         Args:
             shots (int, optional): Number of measurement shots for simulation.
                 Higher values provide better statistical accuracy. Defaults to 1024.
-            **kwargs: Additional keyword arguments for compatibility with other
-                run methods. Currently unused.
+            method (str, optional): Simulation method to use. Options include:
+                - "automatic": Auto-select based on circuit (default)
+                - "statevector": Dense statevector simulation (ideal for small circuits)
+                - "density_matrix": Density matrix simulation (supports noise)
+                - "stabilizer": Clifford simulator (fast for Clifford circuits)
+                - "extended_stabilizer": Approximate Clifford+T simulator
+                - "matrix_product_state": MPS/tensor network simulator
+                - "unitary": Compute circuit unitary (no measurement)
+                - "superop": Compute superoperator representation
+                Defaults to "automatic".
+            noise_model (NoiseModel, optional): Qiskit Aer noise model for noisy
+                simulation. Can be created from real devices or custom error channels.
+            coupling_map (list or CouplingMap, optional): Device coupling map for
+                layout constraints and hardware emulation.
+            basis_gates (list, optional): Basis gates for device emulation. Circuit
+                will be decomposed to these gates during transpilation.
+            device (str, optional): Compute device selection: "CPU" or "GPU".
+                GPU requires qiskit-aer-gpu package. Defaults to "CPU".
+            precision (str, optional): Floating point precision: "single" or "double".
+                Single precision uses less memory and may be faster. Defaults to "double".
+            optimization_level (int, optional): Qiskit transpiler optimization level
+                (0-3). Higher levels apply more optimizations but take longer.
+                Defaults to 1.
+            seed_simulator (int, optional): Random seed for reproducible simulation.
+                If None, uses random seed.
+            max_parallel_threads (int, optional): Maximum threads for OpenMP
+                parallelization. If None, uses system default.
+            max_parallel_experiments (int, optional): Maximum parallel circuit
+                executions for batched jobs. If None, uses Aer default.
+            blocking_enable (bool, optional): Enable automatic qubit blocking for
+                large circuits to reduce memory usage. Defaults to True.
+            blocking_qubits (int, optional): Qubits per block when blocking is enabled.
+                Defaults to 5.
+            **backend_options: Additional AerSimulator backend options. See Qiskit
+                Aer documentation for complete list of supported options.
             
         Returns:
-            Any: Result object from Aer simulation containing measurement counts
-                and execution metadata.
-        """
-        # Ensure main circuit is built
-        if self.main_circuit is None:
-            self.build_main_circuit()
+            Any: Qiskit Result object containing measurement counts, execution
+                metadata, and optional saved state data.
+                
+        Raises:
+            ImportError: If qiskit-aer is not installed.
             
-        # Import Aer backend locally
-        from pytket.extensions.qiskit import AerBackend
+        Examples:
+            Ideal statevector simulation:
+            
+            >>> result = solver.run_aer(shots=1024, method="statevector")
+            
+            Noisy simulation with custom noise model:
+            
+            >>> from qiskit_aer.noise import NoiseModel, depolarizing_error
+            >>> noise = NoiseModel()
+            >>> noise.add_all_qubit_quantum_error(
+            ...     depolarizing_error(0.01, 2), ['cx']
+            ... )
+            >>> result = solver.run_aer(
+            ...     shots=4096,
+            ...     method="density_matrix",
+            ...     noise_model=noise
+            ... )
+            
+            GPU-accelerated MPS simulation:
+            
+            >>> result = solver.run_aer(
+            ...     shots=2048,
+            ...     method="matrix_product_state",
+            ...     device="GPU",
+            ...     precision="single"
+            ... )
+            
+            Device emulation from real backend:
+            
+            >>> from qiskit_ibm_runtime import QiskitRuntimeService
+            >>> from qiskit_aer.noise import NoiseModel
+            >>> service = QiskitRuntimeService()
+            >>> real_backend = service.backend("ibm_brisbane")
+            >>> noise = NoiseModel.from_backend(real_backend)
+            >>> result = solver.run_aer(
+            ...     shots=8192,
+            ...     method="density_matrix",
+            ...     noise_model=noise,
+            ...     coupling_map=real_backend.coupling_map,
+            ...     basis_gates=real_backend.configuration().basis_gates,
+            ...     optimization_level=2
+            ... )
+        """
+        try:
+            from qiskit_aer import AerSimulator
+            from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+        except ImportError as e:
+            raise ImportError(
+                "qiskit-aer is required for Aer simulation. "
+                "Install with: pip install qiskit-aer"
+            ) from e
         
-        # Create Aer backend and run simulation
-        aer = AerBackend()
-        # At this point main_circuit is guaranteed to be non-None
-        assert self.main_circuit is not None
-        handle = aer.process_circuit(self.main_circuit, n_shots=shots)
-        result = aer.get_result(handle)
+        # Build circuit in Qiskit format (SDK detection will handle this)
+        if self.main_circuit is None or not hasattr(self.main_circuit, 'qubits'):
+            # Build or convert to Qiskit format
+            self.main_circuit = self.build_main_circuit(sdk="qiskit")
+        
+        # Ensure we have a Qiskit circuit
+        if not isinstance(self.main_circuit, QuantumCircuit):
+            # Try to convert from pytket if needed
+            if hasattr(self.main_circuit, 'to_qiskit'):
+                from pytket.extensions.qiskit import tk_to_qiskit
+                qc = tk_to_qiskit(self.main_circuit)
+            else:
+                # Rebuild as Qiskit circuit
+                qc = self.build_main_circuit(sdk="qiskit")
+        else:
+            qc = self.main_circuit
+        
+        # Configure AerSimulator with all options
+        aer_options = {
+            "method": method,
+            "device": device,
+            "precision": precision,
+            "blocking_enable": blocking_enable,
+            "blocking_qubits": blocking_qubits,
+        }
+        
+        # Add optional parameters
+        if noise_model is not None:
+            aer_options["noise_model"] = noise_model
+        if coupling_map is not None:
+            aer_options["coupling_map"] = coupling_map
+        if basis_gates is not None:
+            aer_options["basis_gates"] = basis_gates
+        if seed_simulator is not None:
+            aer_options["seed_simulator"] = seed_simulator
+        if max_parallel_threads is not None:
+            aer_options["max_parallel_threads"] = max_parallel_threads
+        if max_parallel_experiments is not None:
+            aer_options["max_parallel_experiments"] = max_parallel_experiments
+        
+        # Merge additional backend options
+        aer_options.update(backend_options)
+        
+        # Create AerSimulator
+        backend = AerSimulator(**aer_options)
+        
+        # Transpile circuit for Aer
+        pm = generate_preset_pass_manager(
+            optimization_level=optimization_level,
+            backend=backend
+        )
+        transpiled_qc = pm.run(qc)
+        
+        # Run simulation
+        job = backend.run(transpiled_qc, shots=shots)
+        result = job.result()
         
         return result
     
@@ -1054,8 +1299,15 @@ class QuantumSolver(ABC):
         path.parent.mkdir(parents=True, exist_ok=True)
         
         # Use QPY format for Qiskit circuits (more robust than QASM)
-        with path.open("wb") as f:
-            qpy.dump(circuit, f)
+        try:
+            with path.open("wb") as f:
+                qpy.dump(circuit, f)
+        except Exception as e:
+            # QPY serialization can fail for certain circuits (e.g., with custom gates)
+            # Fall back to QASM if available, or skip caching
+            import logging
+            logging.warning(f"Failed to save Qiskit circuit using QPY: {e}. Circuit caching skipped.")
+            # Don't raise - just skip caching for this circuit
     
     def _load_qiskit_circuit(self, path: Path) -> Any:
         """Load a Qiskit QuantumCircuit from JSON format.

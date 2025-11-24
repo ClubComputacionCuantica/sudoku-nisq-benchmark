@@ -380,3 +380,56 @@ class ExactCoverEncoding:
                         subsets[key].append(col_item)
                 i += 1
         return dict(subsets)
+    
+    def to_canonical_encoding(self, encoding_type: str = 'simple') -> str:
+        """
+        Compute canonical encoding for this Sudoku puzzle as an exact cover problem.
+        
+        Creates a temporary ExactCoverProblem instance with the appropriate subsets
+        (based on encoding_type), then delegates to the problem's to_canonical_encoding()
+        method to compute the canonical binary string representation.
+        
+        Args:
+            encoding_type (str): Type of encoding to use. Must be one of:
+                - 'simple': Direct cell-digit assignment encoding (default)
+                - 'pattern': Pattern-based encoding (reduced problem size)
+        
+        Returns:
+            str: Canonical binary string encoding of the form un(n);un(m);bits(A*)
+                where A* is the canonical incidence matrix.
+        
+        Raises:
+            ValueError: If encoding_type is not 'simple' or 'pattern'.
+        
+        Example:
+            >>> from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
+            >>> puzzle = SudokuPuzzle(2, [[1, 0], [0, 0]])
+            >>> encoder = ExactCoverEncoding(puzzle)
+            >>> enc_simple = encoder.to_canonical_encoding('simple')
+            >>> enc_pattern = encoder.to_canonical_encoding('pattern')
+            >>> # Different encodings for same puzzle
+            >>> enc_simple != enc_pattern
+            True
+        
+        Note:
+            Different encoding_type values will produce different canonical encodings
+            even for the same Sudoku puzzle, because they represent different exact
+            cover problem instances (with different constraint sets and subsets).
+        """
+        from sudoku_nisq.exact_cover_problem import ExactCoverProblem
+        
+        if encoding_type not in ('simple', 'pattern'):
+            raise ValueError(f"encoding_type must be 'simple' or 'pattern', got {encoding_type}")
+        
+        # Get appropriate universe and subsets
+        if self.subgrid_size >= 2:
+            universe = self.universe
+            subsets = self.simple_subsets if encoding_type == 'simple' else self.pattern_subsets
+        else:
+            # 2x2 case
+            universe = self.universe2x2
+            subsets = self.simple_subsets if encoding_type == 'simple' else self.pattern_subsets
+        
+        # Create temporary ExactCoverProblem and delegate
+        problem = ExactCoverProblem(universe=universe, subsets=subsets)
+        return problem.to_canonical_encoding()

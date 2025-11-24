@@ -14,31 +14,19 @@ COMPLETE flow including circuit format conversions:
 
 .. code-block:: text
 
+                    Qiskit circuit
     ┌─────────────────────────────────────────────────────────┐
-    │     YOUR CODE: Grover Circuit (pytket.Circuit)           │
-    └────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼ tk_to_qiskit()
+    │              Mitiq (ZNE / PEC)                          │
+    │  • Scales noise (gate folding for ZNE)                  │
+    │  • Samples circuits (quasiprobabilities for PEC)        │
+    │  • Works ONLY with Qiskit/Cirq circuits                 │
+    │  • Calls executor(qiskit_circuit) multiple times        │
+    └───────────────────┬────────────────────────────────────┘
+                        │
+                        ▼ Qiskit circuit (modified by Mitiq)
     ┌─────────────────────────────────────────────────────────┐
-    │        apply_zne(): Convert pytket → Qiskit              │
-    │     (Mitiq requires Qiskit/Cirq format)                  │
-    └────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼ Qiskit circuit
-    ┌─────────────────────────────────────────────────────────┐
-    │              Mitiq (ZNE / PEC)                           │
-    │  • Scales noise (gate folding for ZNE)                   │
-    │  • Samples circuits (quasiprobabilities for PEC)         │
-    │  • Works ONLY with Qiskit/Cirq circuits                  │
-    │  • Calls executor(qiskit_circuit) multiple times         │
-    └────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼ Qiskit circuit (modified by Mitiq)
-    ┌─────────────────────────────────────────────────────────┐
-    │     execute(qiskit_circuit) -> float  [EXECUTOR]         │
+    │     execute(qiskit_circuit) -> float  [EXECUTOR]        │
     │  ┌───────────────────────────────────────────────────┐  │
-    │  │ 0. Convert: Qiskit → pytket (qiskit_to_tk)       │  │
-    │  │    ★ This is the KEY translation step! ★          │  │
     │  │ 1. Get backend from BackendManager                │  │
     │  │ 2. Run: handle = backend.process_circuit(pytket)  │  │
     │  │ 3. Get: result = backend.get_result(handle)       │  │
@@ -46,24 +34,23 @@ COMPLETE flow including circuit format conversions:
     │  │ 5. Compute: success_prob from counts + validator  │  │
     │  │ 6. Return: success_prob (scalar in [0, 1])        │  │
     │  └───────────────────────────────────────────────────┘  │
-    └────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼ pytket circuit (now works with ANY backend!)
+    └───────────────────┬────────────────────────────────────┘
+                        │
+                        ▼
     ┌─────────────────────────────────────────────────────────┐
-    │     Backend (via BackendManager)                         │
-    │  • IBM Quantum  → pytket-qiskit backend wrapper          │
-    │  • Quantinuum   → pytket-quantinuum (native pytket)      │
-    │  • Aer Simulator → pytket-qiskit AerBackend              │
+    │     Backend (via BackendManager)                        │
+    │  • IBM Quantum  → qiskit backend wrapper         │
+    │  • Quantinuum   → pytket-quantinuum (native pytket)     │
+    │  • Aer Simulator → pytket-qiskit AerBackend             │
     │  Note: AWS Braket uses native Braket SDK (not pytket)   │
-    │        and requires different circuit conversion         │
+    │        and requires different circuit conversion        │
     └─────────────────────────────────────────────────────────┘
 
 **CRITICAL: Mitiq doesn't know your backends are Quantinuum/IBM/etc!**
 
-Mitiq thinks it's always working with Qiskit circuits. The executor secretly:
+Mitiq thinks it's always working with Qiskit circuits.
 1. Receives Qiskit circuit from Mitiq (after noise scaling)
 2. Converts to pytket using qiskit_to_tk()
-3. Runs on ANY pytket backend (Quantinuum, Rigetti, IBM, etc.)
 4. Returns success probability to Mitiq
 
 This is why the SAME executor pattern works with all backends despite Mitiq
@@ -347,31 +334,77 @@ def create_zne_executor(
     def executor(circuit: Any) -> float:
         """Execute circuit and return success probability expectation.
         
+        Supports both PyTKET and native Qiskit backends:
+        - PyTKET backends: Use backend.process_circuit() interface
+        - Qiskit backends: Use backend.run() interface
+        
         Conversion rules:
         - Accepts either a `pytket.Circuit` or `qiskit.QuantumCircuit` provided by Mitiq.
-        - If a Qiskit circuit is received it is converted via `qiskit_to_tk`.
+        - If a Qiskit circuit is received it is converted via `qiskit_to_tk` for PyTKET backends.
+        - For native Qiskit backends, Qiskit circuits are used directly.
         - Any other type raises `TypeError` to fail fast with a clear message.
         
         Returns:
             float: Success probability as expectation value.
         """
         from pytket import Circuit
-        if not isinstance(circuit, Circuit):
-            try:
-                from pytket.extensions.qiskit import qiskit_to_tk
-                from qiskit import QuantumCircuit
-            except ImportError as exc:
-                raise ImportError(
-                    "pytket-qiskit extension and qiskit are required for Qiskit→pytket conversion. "
-                    "Install with: pip install 'pytket[qiskit]' qiskit"
-                ) from exc
-            if isinstance(circuit, QuantumCircuit):
-                circuit = qiskit_to_tk(circuit)
+        from qiskit import QuantumCircuit
+        
+        # Detect backend type
+        backend_module = getattr(backend, '__module__', '')
+        is_qiskit_backend = 'qiskit_ibm_runtime' in backend_module or \
+                           (hasattr(backend, 'target') or hasattr(backend, 'configuration'))
+        is_pytket_backend = hasattr(backend, 'process_circuit') and hasattr(backend, 'get_result')
+        
+        # Handle circuit format based on backend type
+        if is_qiskit_backend and not is_pytket_backend:
+            # Native Qiskit backend - use Qiskit circuit directly
+            if isinstance(circuit, Circuit):
+                # Convert pytket to Qiskit
+                try:
+                    from pytket.extensions.qiskit import tk_to_qiskit
+                    qiskit_circuit = tk_to_qiskit(circuit)
+                except ImportError as exc:
+                    raise ImportError(
+                        "pytket-qiskit extension is required for pytket→Qiskit conversion. "
+                        "Install with: pip install 'pytket[qiskit]'"
+                    ) from exc
+            elif isinstance(circuit, QuantumCircuit):
+                qiskit_circuit = circuit
             else:
                 raise TypeError(
                     f"Unsupported circuit type from Mitiq: {type(circuit)}. "
                     "Only pytket.Circuit and qiskit.QuantumCircuit are supported."
                 )
+            
+            # Execute on native Qiskit backend
+            job = backend.run(qiskit_circuit, shots=shots)
+            result = job.result()
+            counts = result.get_counts()
+            
+        else:
+            # PyTKET backend - convert to pytket circuit
+            if isinstance(circuit, QuantumCircuit):
+                try:
+                    from pytket.extensions.qiskit import qiskit_to_tk
+                    pytket_circuit = qiskit_to_tk(circuit)
+                except ImportError as exc:
+                    raise ImportError(
+                        "pytket-qiskit extension and qiskit are required for Qiskit→pytket conversion. "
+                        "Install with: pip install 'pytket[qiskit]' qiskit"
+                    ) from exc
+            elif isinstance(circuit, Circuit):
+                pytket_circuit = circuit
+            else:
+                raise TypeError(
+                    f"Unsupported circuit type from Mitiq: {type(circuit)}. "
+                    "Only pytket.Circuit and qiskit.QuantumCircuit are supported."
+                )
+            
+            # Execute on PyTKET backend
+            handle = backend.process_circuit(pytket_circuit, n_shots=shots, **kwargs)
+            result = backend.get_result(handle)
+            counts = result.get_counts()
 
         # Safety: ensure solver has a validator
         validator = getattr(solver, "_is_valid_solution", None)
@@ -380,9 +413,6 @@ def create_zne_executor(
                 "Solver is missing a callable '_is_valid_solution' validator required for mitigation."
             )
 
-        handle = backend.process_circuit(circuit, n_shots=shots, **kwargs)
-        result = backend.get_result(handle)
-        counts = result.get_counts()
         return compute_success_expectation(counts, validator)
     
     return executor
@@ -488,26 +518,65 @@ def create_pec_executor(
     def executor(circuit: Any) -> float:
         """Execute circuit and return success probability expectation.
         
+        Supports both PyTKET and native Qiskit backends via backend detection.
         Accepts pytket or Qiskit circuits (after PEC sampling). Fails fast for
         unsupported types to surface misconfiguration early.
         """
         from pytket import Circuit
-        if not isinstance(circuit, Circuit):
-            try:
-                from pytket.extensions.qiskit import qiskit_to_tk
-                from qiskit import QuantumCircuit
-            except ImportError as exc:
-                raise ImportError(
-                    "pytket-qiskit extension and qiskit are required for Qiskit→pytket conversion. "
-                    "Install with: pip install 'pytket[qiskit]' qiskit"
-                ) from exc
-            if isinstance(circuit, QuantumCircuit):
-                circuit = qiskit_to_tk(circuit)
+        from qiskit import QuantumCircuit
+        
+        # Detect backend type
+        backend_module = getattr(backend, '__module__', '')
+        is_qiskit_backend = 'qiskit_ibm_runtime' in backend_module or \
+                           (hasattr(backend, 'target') or hasattr(backend, 'configuration'))
+        is_pytket_backend = hasattr(backend, 'process_circuit') and hasattr(backend, 'get_result')
+        
+        # Handle circuit format based on backend type
+        if is_qiskit_backend and not is_pytket_backend:
+            # Native Qiskit backend
+            if isinstance(circuit, Circuit):
+                try:
+                    from pytket.extensions.qiskit import tk_to_qiskit
+                    qiskit_circuit = tk_to_qiskit(circuit)
+                except ImportError as exc:
+                    raise ImportError(
+                        "pytket-qiskit extension is required for pytket→Qiskit conversion. "
+                        "Install with: pip install 'pytket[qiskit]'"
+                    ) from exc
+            elif isinstance(circuit, QuantumCircuit):
+                qiskit_circuit = circuit
             else:
                 raise TypeError(
                     f"Unsupported circuit type from Mitiq/PEC: {type(circuit)}. "
                     "Only pytket.Circuit and qiskit.QuantumCircuit are supported."
                 )
+            
+            job = backend.run(qiskit_circuit, shots=shots)
+            result = job.result()
+            counts = result.get_counts()
+            
+        else:
+            # PyTKET backend
+            if isinstance(circuit, QuantumCircuit):
+                try:
+                    from pytket.extensions.qiskit import qiskit_to_tk
+                    pytket_circuit = qiskit_to_tk(circuit)
+                except ImportError as exc:
+                    raise ImportError(
+                        "pytket-qiskit extension and qiskit are required for Qiskit→pytket conversion. "
+                        "Install with: pip install 'pytket[qiskit]' qiskit"
+                    ) from exc
+            elif isinstance(circuit, Circuit):
+                pytket_circuit = circuit
+            else:
+                raise TypeError(
+                    f"Unsupported circuit type from Mitiq/PEC: {type(circuit)}. "
+                    "Only pytket.Circuit and qiskit.QuantumCircuit are supported."
+                )
+            
+            handle = backend.process_circuit(pytket_circuit, n_shots=shots, **kwargs)
+            result = backend.get_result(handle)
+            counts = result.get_counts()
 
         validator = getattr(solver, "_is_valid_solution", None)
         if not callable(validator):
@@ -515,9 +584,6 @@ def create_pec_executor(
                 "Solver is missing a callable '_is_valid_solution' validator required for mitigation."
             )
 
-        handle = backend.process_circuit(circuit, n_shots=shots, **kwargs)
-        result = backend.get_result(handle)
-        counts = result.get_counts()
         return compute_success_expectation(counts, validator)
     
     return executor

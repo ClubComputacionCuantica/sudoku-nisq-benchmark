@@ -1,13 +1,25 @@
-"""IBM Quantum provider implementation."""
+"""IBM Quantum provider implementation using native Qiskit runtime backends."""
 
 from typing import List, Optional, Any
-from pytket.extensions.qiskit import IBMQBackend, set_ibmq_config
 from qiskit_ibm_runtime import QiskitRuntimeService
 from .base import QuantumProvider
 
 
 class IBMProvider(QuantumProvider):
-    """IBM Quantum provider implementation."""
+    """IBM Quantum provider implementation using native Qiskit runtime backends.
+    
+    This provider returns native QiskitRuntimeService backends that support
+    the full Qiskit 2.2+ transpilation pipeline with 6-stage compilation:
+    init → layout → routing → translation → optimization → scheduling.
+    
+    Native backends provide access to Target-driven compilation and advanced
+    features like dynamic circuits, pulse-level control, and error mitigation.
+    """
+    
+    def __init__(self):
+        """Initialize IBM provider."""
+        super().__init__()
+        self._service: Optional[QiskitRuntimeService] = None
     
     @property
     def provider_name(self) -> str:
@@ -15,7 +27,7 @@ class IBMProvider(QuantumProvider):
     
     @property
     def sdk_type(self) -> str:
-        """IBM Quantum uses Qiskit SDK."""
+        """IBM Quantum uses native Qiskit SDK."""
         return "qiskit"
     
     def authenticate(self, **kwargs: Any) -> List[str]:
@@ -42,21 +54,20 @@ class IBMProvider(QuantumProvider):
             print("IBM provider already configured. Use overwrite=True to reconfigure.")
             return self.list_available_devices()
 
-        set_ibmq_config(ibmq_api_token=api_token, instance=instance)
-        self._configured = True
-
         try:
             QiskitRuntimeService.save_account(
-                channel="ibm_quantum_platform",
+                channel="ibm_quantum",
                 token=api_token,
                 instance=instance,
                 overwrite=True
             )
-            print("IBM authentication successful")
+            # Initialize service for immediate use
+            self._service = QiskitRuntimeService()
+            self._configured = True
+            print("IBM authentication successful (native Qiskit runtime)")
             return self.list_available_devices()
         except Exception as e:
-            print(f"IBM authentication successful but failed to list devices: {e}")
-            return []
+            raise RuntimeError(f"IBM authentication failed: {e}") from e
     
     def list_available_devices(self, **kwargs) -> List[str]:
         """List available IBM Quantum devices without re-authentication.
@@ -69,32 +80,25 @@ class IBMProvider(QuantumProvider):
         """
         if not self._configured:
             raise RuntimeError("Call authenticate() before listing devices")
+        
+        if self._service is None:
+            self._service = QiskitRuntimeService()
             
         try:
-            devices = QiskitRuntimeService().backends()
-            device_names = [dev.backend_name for dev in devices if dev.backend_name is not None]
-            print(f"Found {len(devices)} IBM devices available to your account")
+            backends = self._service.backends()
+            device_names = [backend.name for backend in backends]
+            print(f"Found {len(backends)} IBM devices available to your account")
             print(f"Available devices: {device_names}")
             return device_names
         except Exception as e:
-            print(f"Warning: Failed to list devices using QiskitRuntimeService: {e}")
-            try:
-                print("Attempting fallback method to list devices...")
-                devices = IBMQBackend.available_devices(device="ibm_brisbane")
-                device_names = [dev.device_name for dev in devices if dev.device_name is not None]
-                print(f"Found {len(devices)} IBM devices available to your account")
-                print(f"Available devices: {device_names}")
-                return device_names
-            except Exception as fallback_e:
-                print(f"Fallback also failed: {fallback_e}")
-                return []
+            raise RuntimeError(f"Failed to list IBM devices: {e}") from e
     
     def add_device(
         self, 
         device: str, 
         alias: Optional[str] = None,
         **kwargs
-    ) -> IBMQBackend:
+    ):
         """Register an IBM Quantum device for use in the backend registry.
         
         Args:
@@ -102,17 +106,21 @@ class IBMProvider(QuantumProvider):
             alias (Optional[str]): Custom alias for the device.
                 
         Returns:
-            IBMQBackend: The initialized and ready-to-use backend instance.
+            The native Qiskit runtime backend instance.
             
         Raises:
             RuntimeError: If authenticate() has not been called first.
         """
         if not self._configured:
             raise RuntimeError("Call authenticate() before adding devices")
+        
+        if self._service is None:
+            self._service = QiskitRuntimeService()
             
         name = alias or device
-        backend = IBMQBackend(device)
+        backend = self._service.backend(device)
         self._backends[name] = backend
+        print(f"Added IBM device '{device}' as '{name}' (native Qiskit backend)")
         return backend
     
     def init_device(self, device: str, alias: Optional[str] = None, **kwargs: Any) -> str:

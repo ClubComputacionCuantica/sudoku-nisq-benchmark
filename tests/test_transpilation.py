@@ -16,13 +16,13 @@ from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
 
 
 @pytest.fixture
-def puzzle_2x2():
+def puzzle_2x2(tmp_path):
     """Create a 2x2 Sudoku puzzle for testing."""
     board = [
         [0, 0],
         [0, 0]
     ]
-    return QSudoku.from_board(board, cache_base=".test_cache")
+    return QSudoku.from_board(board, cache_base=str(tmp_path / ".test_cache"))
 
 
 @pytest.fixture

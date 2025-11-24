@@ -1,7 +1,7 @@
 """Unified manager for quantum computing backends across multiple providers."""
 
 from typing import Any, Dict, List, Optional
-from .providers import QuantumProvider, IBMProvider, QuantinuumProvider
+from .providers import QuantumProvider, IBMProvider, QuantinuumProvider, AerProvider
 
 
 class BackendManager:
@@ -40,6 +40,7 @@ class BackendManager:
         # Register built-in providers
         self.register_provider(IBMProvider())
         self.register_provider(QuantinuumProvider())
+        self.register_provider(AerProvider())
     
     def register_provider(self, provider: QuantumProvider) -> None:
         """Register a new quantum provider.
@@ -306,6 +307,92 @@ class BackendManager:
         provider = self.get_provider("quantinuum")
         alias = provider.init_device(device=device, alias=alias, **kwargs)
         self._backend_to_provider[alias] = "quantinuum"
+        return alias
+    
+    def init_aer(
+        self,
+        device: str = "automatic",
+        alias: Optional[str] = None,
+        method: Optional[str] = None,
+        noise_model: Any = None,
+        coupling_map: Any = None,
+        basis_gates: Optional[List[str]] = None,
+        device_type: str = "CPU",
+        precision: str = "double",
+        **backend_options
+    ) -> str:
+        """Initialize Qiskit Aer local simulator backend.
+        
+        No authentication required for local Aer simulator. Directly creates and
+        registers an AerSimulator with the specified configuration.
+        
+        Args:
+            device (str, optional): Simulation method to use as device identifier.
+                Options: "automatic" (default), "statevector", "density_matrix",
+                "stabilizer", "extended_stabilizer", "matrix_product_state",
+                "unitary", "superop".
+            alias (Optional[str]): Custom alias for the simulator. If None, uses
+                "aer_{device}" as the alias.
+            method (Optional[str]): Override simulation method (defaults to device
+                parameter). Useful when device is used for alias naming.
+            noise_model (NoiseModel, optional): Qiskit Aer noise model for noisy
+                simulation.
+            coupling_map (list or CouplingMap, optional): Device coupling map.
+            basis_gates (list, optional): Basis gates for device emulation.
+            device_type (str, optional): Compute device: "CPU" or "GPU".
+                Defaults to "CPU".
+            precision (str, optional): Float precision: "single" or "double".
+                Defaults to "double".
+            **backend_options: Additional AerSimulator backend options.
+            
+        Returns:
+            str: The alias used for the simulator backend.
+            
+        Examples:
+            Ideal statevector simulation:
+            
+            >>> manager = BackendManager.inst()
+            >>> alias = manager.init_aer(device="statevector")
+            >>> backend = manager.get(alias)
+            
+            Noisy density matrix simulation:
+            
+            >>> from qiskit_aer.noise import NoiseModel, depolarizing_error
+            >>> noise = NoiseModel()
+            >>> noise.add_all_qubit_quantum_error(
+            ...     depolarizing_error(0.01, 2), ['cx']
+            ... )
+            >>> alias = manager.init_aer(
+            ...     device="density_matrix",
+            ...     noise_model=noise,
+            ...     alias="noisy_dm"
+            ... )
+            
+            GPU-accelerated simulation:
+            
+            >>> alias = manager.init_aer(
+            ...     device="matrix_product_state",
+            ...     device_type="GPU",
+            ...     precision="single",
+            ...     alias="mps_gpu"
+            ... )
+        """
+        provider = self.get_provider("aer")
+        
+        # Add device to Aer provider with all options
+        alias = provider.add_device(
+            device=device,
+            alias=alias,
+            method=method,
+            noise_model=noise_model,
+            coupling_map=coupling_map,
+            basis_gates=basis_gates,
+            device_type=device_type,
+            precision=precision,
+            **backend_options
+        )
+        
+        self._backend_to_provider[alias] = "aer"
         return alias
     
     def list_available_devices(self, provider_name: str, **kwargs) -> List[str]:

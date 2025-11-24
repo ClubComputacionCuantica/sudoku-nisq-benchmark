@@ -1,10 +1,11 @@
 import math
 import mpmath
-from typing import Literal
+from typing import Literal, Optional, List, Dict, Any
 
 from sudoku_nisq.quantum_solver import QuantumSolver
 from sudoku_nisq.encodings.exact_cover_encoding import ExactCoverEncoding
 from sudoku_nisq.utils.memory_tracker import MemoryTracker
+from sudoku_nisq.exact_cover_problem import ExactCoverProblem
 
 class ExactCoverQuantumSolver(QuantumSolver):
     """
@@ -17,8 +18,26 @@ class ExactCoverQuantumSolver(QuantumSolver):
     """
     
     def __init__(self, puzzle=None, metadata_manager=None, encoding: Literal["simple", "pattern"] = "simple",
-                 num_solutions=None, universe=None, subsets=None, **kwargs):
-        """Initialize the ExactCoverQuantumSolver with Sudoku puzzle and configuration."""
+                 num_solutions=None, universe=None, subsets=None, 
+                 exact_cover_problem: Optional[ExactCoverProblem] = None, **kwargs):
+        """
+        Initialize the ExactCoverQuantumSolver.
+        
+        Supports three modes:
+        1. Sudoku mode: Provide puzzle, encoding is applied
+        2. Generic mode: Provide exact_cover_problem (ExactCoverProblem instance)
+        3. Direct mode: Provide universe and subsets directly
+        
+        Args:
+            puzzle: SudokuPuzzle instance (for Sudoku mode)
+            metadata_manager: MetadataManager for caching
+            encoding: Encoding type for Sudoku ("simple" or "pattern")
+            num_solutions: Expected number of solutions
+            universe: Direct universe list (for generic/direct mode)
+            subsets: Direct subsets dict (for generic/direct mode)
+            exact_cover_problem: ExactCoverProblem instance (for generic mode)
+            **kwargs: Additional options (decompose_cnz, track_memory)
+        """
         
         # Extract gate counting options before passing to parent
         self.decompose_cnz = kwargs.pop('decompose_cnz', True)  # Default: decompose for consistency
@@ -26,39 +45,84 @@ class ExactCoverQuantumSolver(QuantumSolver):
         # Extract memory tracking option (advanced/dev feature)
         self.track_memory = kwargs.pop('track_memory', False)  # Default: disabled for production use
         
-        # Initialize the base class with all parameters
-        super().__init__(
-            puzzle=puzzle,
-            metadata_manager=metadata_manager,
-            encoding=encoding,
-            **kwargs
-        )
-                    
-        # Initialize encoding
-        enc = ExactCoverEncoding(puzzle)
-        if universe is not None:
+        # Determine mode: Generic vs Sudoku
+        if exact_cover_problem is not None:
+            # Generic mode: Use ExactCoverProblem
+            self._is_generic = True
+            self.universe = exact_cover_problem.universe
+            self.subsets = exact_cover_problem.subsets
+            self.num_solutions = exact_cover_problem.num_solutions or 1
+            self._problem_hash = exact_cover_problem.get_hash()  # Store hash for caching
+            
+            # For generic mode, puzzle parameter is optional
+            # We still initialize parent but with puzzle=None
+            super().__init__(
+                puzzle=None,
+                metadata_manager=metadata_manager,
+                encoding=encoding,
+                **kwargs
+            )
+            
+        elif universe is not None and subsets is not None:
+            # Direct mode: Use provided universe/subsets
+            self._is_generic = True
             self.universe = universe
-        else:
+            self.subsets = subsets
+            self.num_solutions = num_solutions or 1
+            
+            # Generate hash for caching
+            from sudoku_nisq.exact_cover_problem import ExactCoverProblem
+            temp_problem = ExactCoverProblem(universe=universe, subsets=subsets)
+            self._problem_hash = temp_problem.get_hash()
+            
+            super().__init__(
+                puzzle=None,
+                metadata_manager=metadata_manager,
+                encoding=encoding,
+                **kwargs
+            )
+            
+        elif puzzle is not None:
+            # Sudoku mode: Use ExactCoverEncoding
+            self._is_generic = False
+            
+            # Initialize the base class with puzzle
+            super().__init__(
+                puzzle=puzzle,
+                metadata_manager=metadata_manager,
+                encoding=encoding,
+                **kwargs
+            )
+            
+            # Initialize encoding
+            enc = ExactCoverEncoding(puzzle)
+            
             # Select correct universe depending on puzzle size
             if hasattr(enc, 'universe'):
                 self.universe = enc.universe
             else:
                 self.universe = enc.universe2x2
-        
-        # Determine which encoding to use
-        if encoding == "simple":
-            self.subsets = subsets if subsets is not None else enc.simple_subsets
-        elif encoding == "pattern":
-            self.subsets = subsets if subsets is not None else enc.pattern_subsets
-        else:
-            raise ValueError(f"Unknown encoding {encoding!r}")
-        
-        # Set number of solutions
-        if num_solutions is None:
-            self.num_solutions = puzzle.num_solutions if hasattr(puzzle, 'num_solutions') else 1
-        else:
-            self.num_solutions = num_solutions
             
+            # Determine which encoding to use
+            if encoding == "simple":
+                self.subsets = enc.simple_subsets
+            elif encoding == "pattern":
+                self.subsets = enc.pattern_subsets
+            else:
+                raise ValueError(f"Unknown encoding {encoding!r}")
+            
+            # Set number of solutions
+            self.num_solutions = puzzle.num_solutions if hasattr(puzzle, 'num_solutions') else 1
+            
+        else:
+            raise ValueError(
+                "Must provide one of: "
+                "(1) puzzle for Sudoku mode, "
+                "(2) exact_cover_problem for generic mode, or "
+                "(3) both universe and subsets for direct mode"
+            )
+        
+        # Common initialization for all modes
         self.u_size = len(self.universe)        # Total elements to cover
         self.s_size = len(self.subsets)         # Number of subsets
         self.b = math.ceil(math.log2(self.s_size)) if self.s_size > 1 else 1  # Bits for counting
@@ -216,35 +280,53 @@ class ExactCoverQuantumSolver(QuantumSolver):
             )
     
     def _transpile_qiskit(self, backend, opt_level: int):
-        """Transpile circuit using Qiskit native transpiler.
+        """Transpile circuit using Qiskit's preset pass manager with Target integration.
         
-        Uses Qiskit's qiskit.compiler.transpile() function which supports
-        extensive optimization strategies and hardware-specific compilation.
+        Uses generate_preset_pass_manager() for full 6-stage transpilation pipeline:
+        init → layout → routing → translation → optimization → scheduling.
+        
+        This provides access to advanced IBM backend features like dynamic circuits,
+        pulse-level control, and Target-driven compilation with exact hardware constraints.
+        
+        Falls back to qiskit.compiler.transpile() if backend doesn't support Target
+        (e.g., AerSimulator, legacy backends).
         
         Args:
-            backend: Qiskit backend instance
+            backend: Qiskit backend instance (native runtime or AerSimulator)
             opt_level: Optimization level for transpilation (0-3)
             
         Returns:
             QuantumCircuit: Transpiled circuit in Qiskit format
         """
+        from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
         from qiskit.compiler import transpile
         
         # Ensure main circuit is in Qiskit format
         if not hasattr(self.main_circuit, 'qubits'):
-            # Convert from other formats if needed
             raise TypeError(
                 f"Main circuit must be a Qiskit QuantumCircuit for Qiskit transpilation. "
                 f"Got {type(self.main_circuit)}. Rebuild circuit with sdk='qiskit'."
             )
         
         try:
-            tcirc = transpile(
-                self.main_circuit,
-                backend=backend,
-                optimization_level=opt_level,
-            )
-            return tcirc
+            # Try Target-driven transpilation with generate_preset_pass_manager
+            # This is the modern approach for IBM runtime backends
+            if hasattr(backend, 'target') and backend.target is not None:
+                pm = generate_preset_pass_manager(
+                    optimization_level=opt_level,
+                    backend=backend,
+                )
+                tcirc = pm.run(self.main_circuit)
+                return tcirc
+            else:
+                # Fallback to compiler.transpile for backends without Target
+                # (e.g., AerSimulator, older backends)
+                tcirc = transpile(
+                    self.main_circuit,
+                    backend=backend,
+                    optimization_level=opt_level,
+                )
+                return tcirc
         except Exception as e:
             raise RuntimeError(
                 f"Qiskit transpilation failed at opt_level {opt_level}: {e}"

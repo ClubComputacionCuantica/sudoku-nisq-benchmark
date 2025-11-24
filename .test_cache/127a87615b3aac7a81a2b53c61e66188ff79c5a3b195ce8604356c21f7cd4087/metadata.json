@@ -54,7 +54,7 @@
             },
             "qiskit_aer": {
               "0": {
-                "error": "argument out of range",
+                "error": "unpack requires a buffer of 8 bytes",
                 "sdk_type": "qiskit"
               }
             }
@@ -70,17 +70,6 @@
               "H": 153,
               "Measure": 8,
               "X": 513
-            },
-            "memory_usage": {
-              "current_mb": 259.375,
-              "delta_mb": 0.1796875,
-              "initial_mb": 259.1953125,
-              "peak_mb": 259.375,
-              "snapshots": {
-                "after_qiskit_build": 259.375,
-                "before_circuit": 259.1953125,
-                "initial": 259.1953125
-              }
             },
             "n_gates": 50,
             "n_mcx_gates": 0,

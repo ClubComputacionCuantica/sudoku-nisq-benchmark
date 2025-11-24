@@ -82,8 +82,7 @@ class BacktrackingQuantumSolver(QuantumSolver):
         """Build the quantum circuit implementing the backtracking algorithm for a given SDK.
 
         Currently returns an empty pytket Circuit regardless of SDK while the
-        algorithm implementation is pending. For non-pytket SDKs, conversion
-        logic would be added here later.
+        algorithm implementation is pending.
         """
         # Placeholder: always build a pytket circuit
         return Circuit()

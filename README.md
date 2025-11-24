@@ -44,7 +44,9 @@ This makes Sudoku accessible to study current limitations of quantum devices.
 
 ## Basic Usage
 
-### 1. Create a Sudoku Puzzle
+### Sudoku Workflow
+
+#### 1. Create a Sudoku Puzzle
 
 ```python
 # Generate a 4x4 Sudoku puzzle with 2 missing cells
@@ -55,7 +57,7 @@ sudoku = QSudoku.generate(size=4, num_missing_cells=2)  # or size=2 for 2x2 (no 
 sudoku.plot_puzzle()
 ```
 
-### 2. Set a Quantum Solver
+#### 2. Set a Quantum Solver
 
 ```python
 # Import the solver class
@@ -65,7 +67,7 @@ from sudoku_nisq import ExactCoverQuantumSolver
 sudoku.set_solver(ExactCoverQuantumSolver, encoding="simple") # or "pattern"
 ```
 
-### 3. Build the Quantum Circuit
+#### 3. Build the Quantum Circuit
 
 ```python
 # Build the quantum circuit
@@ -75,7 +77,7 @@ circuit = sudoku.build_circuit()
 sudoku.draw_circuit()
 ```
 
-### 4. Run on Quantum Hardware or Simulator
+#### 4. Run on Quantum Hardware or Simulator
 
 ```python
 # Run on Aer simulator
@@ -87,7 +89,7 @@ ibm_alias = sudoku.init_ibm(api_token="your_token", instance="your_instance",
 result = sudoku.run(ibm_alias, opt_level=1, shots=1000)
 ```
 
-### 5. Analyze Results
+#### 5. Analyze Results
 
 ```python
 # Visualize measurement results
@@ -99,6 +101,42 @@ sudoku.counts_plot(result, show_valid_only=True)
 # Get resource utilization summary
 resources = sudoku.report_resources()
 ```
+
+### Generic Exact Cover Workflow
+
+For problems smaller than minimal Sudoku or general exact cover instances:
+
+```python
+from sudoku_nisq import ExactCoverProblem, QExactCover
+
+# 1. Define an exact cover problem
+universe = [0, 1, 2, 3]
+subsets = {
+    'S_0': [0, 3],
+    'S_1': [1, 2],
+    'S_2': [0, 1, 2]
+}
+problem = ExactCoverProblem(universe, subsets, num_solutions=1)
+
+# 2. Create quantum solver interface
+qec = QExactCover(problem)
+
+# 3. Build and run circuit
+circuit = qec.build_circuit()
+result = qec.run_aer(shots=1024)
+
+# 4. Analyze resources
+resources = qec.report_resources()
+print(f"Requires {resources['estimated']['n_qubits']} qubits")
+
+# 5. (Optional) Compute canonical encoding
+encoding = problem.to_canonical_encoding()
+index = problem.canonical_order_index()
+print(f"Canonical encoding: {encoding[:50]}... (length {len(encoding)})")
+print(f"Global shortlex index: {index}")
+```
+
+See `examples/exact_cover_benchmark.py` for a complete comparison and `examples/canonical_encoding_demo.py` for canonical encoding examples.
 
 ---
 

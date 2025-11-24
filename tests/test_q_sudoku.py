@@ -272,20 +272,25 @@ class TestQSudoku:
 
     def test_transpile_success(self, q_sudoku_4x4):
         """Test successful transpilation."""
+        from unittest.mock import Mock, patch
+        
         mock_backend = Mock()
         mock_solver = Mock()
-        mock_result = Mock()
+        mock_result = {"status": "success", "backend_alias": "test_backend"}
+        mock_transpiled_circuit = Mock()
         
         q_sudoku_4x4._attached_backends["test_backend"] = mock_backend
         q_sudoku_4x4._solver = mock_solver
         mock_solver.transpile_and_analyze.return_value = mock_result
         
-        result = q_sudoku_4x4.transpile("test_backend", 2, test_param="value")
+        # Mock get_transpiled_circuit to return the expected circuit
+        with patch.object(q_sudoku_4x4, 'get_transpiled_circuit', return_value=mock_transpiled_circuit):
+            result = q_sudoku_4x4.transpile("test_backend", 2, test_param="value")
         
         mock_solver.transpile_and_analyze.assert_called_once_with(
             mock_backend, "test_backend", 2, test_param="value"
         )
-        assert result == mock_result
+        assert result == mock_transpiled_circuit
 
     def test_run_no_backend(self, q_sudoku_4x4):
         """Test running without attached backend raises error."""

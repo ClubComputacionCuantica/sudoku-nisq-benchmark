@@ -367,6 +367,214 @@ class QSudoku():
         self.attach_backend(alias)
         return alias
     
+    def init_aer(
+        self,
+        method: str = "automatic",
+        noise_model: Any = None,
+        coupling_map: Any = None,
+        basis_gates: list[str] | None = None,
+        device: str = "CPU",
+        precision: str = "double",
+        alias: Optional[str] = None,
+        **backend_options
+    ) -> str:
+        """Initialize and attach Qiskit Aer local simulator to this puzzle instance.
+        
+        Configures a local Aer simulator with specified simulation method, noise model,
+        and performance options. The simulator is automatically attached to this QSudoku
+        instance for immediate use. Supports ideal and noisy simulation, GPU acceleration,
+        and device emulation.
+        
+        Args:
+            method (str, optional): Simulation method. Options:
+                - "automatic": Auto-select based on circuit (default)
+                - "statevector": Dense statevector simulation
+                - "density_matrix": Density matrix simulation (supports noise)
+                - "stabilizer": Clifford stabilizer simulator
+                - "extended_stabilizer": Approximate Clifford+T simulator
+                - "matrix_product_state": MPS/tensor network simulator
+                - "unitary": Compute circuit unitary
+                - "superop": Compute superoperator representation
+            noise_model (NoiseModel, optional): Qiskit Aer noise model for noisy
+                simulation. Can be created from real devices via NoiseModel.from_backend().
+            coupling_map (list or CouplingMap, optional): Device coupling map for
+                layout constraints and hardware emulation.
+            basis_gates (list, optional): Basis gates for device emulation.
+            device (str, optional): Compute device: "CPU" or "GPU". Defaults to "CPU".
+            precision (str, optional): Float precision: "single" or "double".
+                Defaults to "double".
+            alias (Optional[str]): Custom alias for the simulator. If None, uses
+                "aer_{method}" as the alias.
+            **backend_options: Additional AerSimulator backend options (e.g.,
+                max_parallel_threads, blocking_qubits, etc.).
+                
+        Returns:
+            str: The alias used for the registered simulator, which can be used in
+                run() and transpile() calls.
+                
+        Examples:
+            Ideal statevector simulation:
+            
+            >>> puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=4)
+            >>> alias = puzzle.init_aer(method="statevector")
+            >>> result = puzzle.run(alias, opt_level=1, shots=1024)
+            
+            GPU-accelerated simulation:
+            
+            >>> alias = puzzle.init_aer(
+            ...     method="statevector",
+            ...     device="GPU",
+            ...     precision="single",
+            ...     alias="aer_gpu"
+            ... )
+            
+            Device emulation with noise:
+            
+            >>> from qiskit_ibm_runtime import QiskitRuntimeService
+            >>> from qiskit_aer.noise import NoiseModel
+            >>> service = QiskitRuntimeService()
+            >>> real_backend = service.backend("ibm_brisbane")
+            >>> noise = NoiseModel.from_backend(real_backend)
+            >>> alias = puzzle.init_aer(
+            ...     method="density_matrix",
+            ...     noise_model=noise,
+            ...     coupling_map=real_backend.coupling_map,
+            ...     basis_gates=real_backend.configuration().basis_gates,
+            ...     alias="brisbane_sim"
+            ... )
+            >>> result = puzzle.run(alias, opt_level=2, shots=4096)
+        """
+        alias = BackendManager.inst().init_aer(
+            device=method,  # device param is used as method in AerProvider
+            method=method,
+            noise_model=noise_model,
+            coupling_map=coupling_map,
+            basis_gates=basis_gates,
+            device_type=device,
+            precision=precision,
+            alias=alias,
+            **backend_options
+        )
+        self.attach_backend(alias)
+        return alias
+    
+    def run_aer_with_noise(
+        self,
+        shots: int = 1024,
+        noise_model: Any = None,
+        device_name: Optional[str] = None,
+        method: str = "density_matrix",
+        optimization_level: int = 1,
+        **aer_options
+    ) -> Dict[str, Any]:
+        """Execute circuit on Aer with noise model (custom or auto-generated from device).
+        
+        Convenience method for running noisy simulations. Can either accept a custom
+        noise model or automatically generate one from a real IBM Quantum device name.
+        Uses density_matrix simulation method by default for accurate noisy simulation.
+        
+        Args:
+            shots (int, optional): Number of measurement samples. Defaults to 1024.
+            noise_model (NoiseModel, optional): Custom Qiskit Aer noise model.
+                If None and device_name is provided, noise model is auto-generated
+                from the specified device.
+            device_name (Optional[str]): IBM Quantum device name to generate noise
+                model from (e.g., "ibm_brisbane", "ibm_kyiv"). Ignored if noise_model
+                is provided.
+            method (str, optional): Aer simulation method. Defaults to "density_matrix"
+                which is recommended for noisy simulation. Can use "automatic" for
+                auto-selection or "statevector" for faster approximate noise.
+            optimization_level (int, optional): Transpiler optimization level (0-3).
+                Defaults to 1.
+            **aer_options: Additional arguments passed to run_aer() such as device,
+                precision, coupling_map, basis_gates, etc.
+                
+        Returns:
+            Dict[str, Any]: Simulation results including raw counts, execution time,
+                and metadata.
+                
+        Raises:
+            ValueError: If no solver is set or if neither noise_model nor device_name
+                is provided.
+            ImportError: If qiskit-aer or required packages are not installed.
+            
+        Examples:
+            With custom noise model:
+            
+            >>> from qiskit_aer.noise import NoiseModel, depolarizing_error
+            >>> noise = NoiseModel()
+            >>> noise.add_all_qubit_quantum_error(
+            ...     depolarizing_error(0.01, 2), ['cx']
+            ... )
+            >>> result = puzzle.run_aer_with_noise(
+            ...     shots=4096,
+            ...     noise_model=noise
+            ... )
+            
+            Auto-generate from device:
+            
+            >>> result = puzzle.run_aer_with_noise(
+            ...     shots=8192,
+            ...     device_name="ibm_brisbane",
+            ...     optimization_level=2
+            ... )
+            
+            With GPU acceleration:
+            
+            >>> result = puzzle.run_aer_with_noise(
+            ...     shots=2048,
+            ...     device_name="ibm_kyiv",
+            ...     device="GPU",
+            ...     precision="single"
+            ... )
+        """
+        if not self._solver:
+            raise ValueError("No solver set. Call set_solver() first.")
+        
+        # Auto-generate noise model from device if needed
+        if noise_model is None and device_name is not None:
+            try:
+                from qiskit_aer.noise import NoiseModel
+                from qiskit.providers.fake_provider import GenericBackendV2
+                
+                # Try to get fake backend for noise model generation
+                try:
+                    # First try with real backend name
+                    fake_backend = GenericBackendV2.from_backend_name(device_name)
+                except Exception:
+                    # If that fails, try common alternatives
+                    raise ValueError(
+                        f"Could not generate noise model from device '{device_name}'. "
+                        "Provide a valid IBM device name or a custom noise_model."
+                    )
+                
+                noise_model = NoiseModel.from_backend(fake_backend)
+                
+                # Also get coupling map and basis gates for realistic emulation
+                if 'coupling_map' not in aer_options:
+                    aer_options['coupling_map'] = fake_backend.coupling_map
+                if 'basis_gates' not in aer_options:
+                    aer_options['basis_gates'] = fake_backend.configuration().basis_gates
+                    
+            except ImportError as e:
+                raise ImportError(
+                    "qiskit-aer and qiskit fake providers are required for device noise models. "
+                    "Install with: pip install qiskit-aer"
+                ) from e
+        elif noise_model is None and device_name is None:
+            raise ValueError(
+                "Either noise_model or device_name must be provided for noisy simulation."
+            )
+        
+        # Run with Aer and noise
+        return self._solver.run_aer(
+            shots=shots,
+            method=method,
+            noise_model=noise_model,
+            optimization_level=optimization_level,
+            **aer_options
+        )
+    
     def set_solver(self, solver_class: Type["QuantumSolver"], encoding: Optional[str] = None, **solver_kwargs) -> Optional["QuantumSolver"]:
         """Set the active quantum solver for this puzzle with automatic memory management.
         

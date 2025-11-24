@@ -1,0 +1,31 @@
+{
+  "board": "[[0, 3, 4, 1], [0, 0, 0, 2], [0, 4, 2, 3], [0, 2, 1, 4]]",
+  "num_missing_cells": 6,
+  "puzzle_hash": "620bc5fd1f8776fa3a8b8525167bb9867db621d68f66127f598c7950bdf09ff7",
+  "size": 4,
+  "solvers": {
+    "ExactCoverQuantumSolver": {
+      "encodings": {
+        "simple": {
+          "main_circuit_resources": {
+            "depth": 290,
+            "gate_counts": {
+              "C3X": 448,
+              "C6X": 8,
+              "C72X": 8,
+              "CCX": 448,
+              "CX": 448,
+              "H": 136,
+              "Measure": 7,
+              "X": 881
+            },
+            "n_gates": 1984,
+            "n_mcx_gates": 1352,
+            "n_qubits": 80
+          },
+          "sdk_type": "pytket"
+        }
+      }
+    }
+  }
+}
