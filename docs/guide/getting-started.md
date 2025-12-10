@@ -3,15 +3,15 @@
 This guide walks through solving a Sudoku puzzle using the quantum exact cover solver.
 
 ```{note}
-Use 2x2 or 4x4 puzzles for realistic quantum execution. Larger puzzles (9x9 and beyond) are currently unsolvable on any existing quantum hardware.
+Use 2x2 or 4x4 puzzles for realistic quantum execution. Larger puzzles (9x9 and beyond) are largely unsolvable on any existing quantum hardware.
 ```
 
 ## 1. Create or Load a Puzzle
 ```python
 from sudoku_nisq import QSudoku
 
-# For quick simulations, use 2x2
-puzzle = QSudoku.generate(size=2, num_missing_cells=2, subgrid_size=1)
+# For quick simulations, use small instances
+puzzle = QSudoku.generate(size=4, num_missing_cells=3)
 
 # For more realistic benchmarks, use 4x4
 board_4x4 = [
@@ -45,6 +45,14 @@ print(resources)
 # alias = puzzle.init_ibm(api_token="<token>", instance="<crn>", device="ibm_brisbane")
 ```
 
+(backend-configuration)=
+## Backend Configuration
+
+```{admonition} Backend Configuration
+:class: tip
+See {doc}`providers` for backend setup details and configuration examples.
+```
+
 ## 5. Run the Solver
 ```python
 # Local simulator (no credentials)
@@ -58,10 +66,4 @@ result = puzzle.run_aer(shots=512)
 ```python
 puzzle.counts_plot(result, backend_alias="Local", shots=512)
 summary = puzzle.report_resources()
-```
-
-```{toctree}
-:maxdepth: 1
-
-architecture
 ```

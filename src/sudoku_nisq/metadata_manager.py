@@ -529,3 +529,25 @@ class MetadataManager:
                 solver_summary[encoding_name] = encoding_summary
         
         return summary
+
+    def record_execution_metrics(self, solver_name: str, encoding: str,
+                                 backend_alias: str, opt_level: int,
+                                 metrics: dict) -> None:
+        """Persist counts-derived execution metrics under solver/encoding/backend.
+
+        Args:
+            solver_name: Name of the solver class (e.g., 'ExactCoverQuantumSolver')
+            encoding: Encoding identifier used by the solver (e.g., 'simple')
+            backend_alias: Alias of the backend the circuit ran on
+            opt_level: Transpilation optimization level
+            metrics: Dictionary of execution metrics (success_rate, eta, eta2, etc.)
+        """
+        md = self.load()
+        solvers = md.setdefault("solvers", {})
+        solver_entry = solvers.setdefault(solver_name, {})
+        encodings = solver_entry.setdefault("encodings", {})
+        encoding_entry = encodings.setdefault(encoding, {})
+        backends = encoding_entry.setdefault("backends", {})
+        backend_entry = backends.setdefault(backend_alias, {})
+        backend_entry[str(opt_level)] = {"execution_metrics": metrics}
+        self._dirty = True

@@ -1,47 +1,50 @@
 # Sudoku NISQ Benchmark
 
-> Quantum Sudoku as an approachable benchmarking problem for near-term quantum devices.
+Approachable Sudoku-based exact cover benchmarking for near-term quantum devices.
 
-## Overview
-This project provides:
-- Encoding of Sudoku as an exact cover problem.
-- Multiple circuit backends (PyTKET primary, Qiskit native, Braket native).
-- Provider abstraction with IBM tested; Quantinuum in progress.
-- Solver orchestration with resource estimation utilities.
-
-## Quickstart
-See the dedicated page: {doc}`guide/quickstart`.
-
-## Installation
-See {doc}`guide/installation`.
-
-## Documentation Structure
-- `guide/` high-level usage guides.
-- `api/` auto-generated API reference (Sphinx autodoc + autosummary).
- - Examples are embedded in guides to keep things simple.
+## Quick Links
+- Quickstart: {doc}`guide/quickstart`
+- Installation: {doc}`guide/installation`
+- Examples (runnable): see the `examples/` folder; walkthroughs in {doc}`guide/examples`
+- Features: {doc}`guide/features`
+- Metrics: {doc}`guide/metrics`
+- Error Mitigation: {doc}`guide/error_mitigation`
+- API Reference: {doc}`api/index`
+- Releases: {doc}`releases/index`
 
 ```{toctree}
 :maxdepth: 2
-:caption: Contents
+:caption: Guides
 
 guide/installation
 guide/quickstart
 guide/getting-started
+guide/features
+guide/benchmarking
+guide/providers
+guide/canonical_encoding
+guide/error_mitigation
+guide/exact_cover
+guide/aer_features
+guide/metrics
 guide/examples
 guide/contributing
-guide/current-state
-releases/index
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: API
+
 api/index
 ```
 
-## Roadmap (TODO)
-- [ ] Add Braket circuit implementation
-- [ ] Add classical baseline performance comparisons
-- [ ] Add benchmarking harness for multiple puzzle sizes
-- [ ] Stabilize public API and remove deprecated shims
+```{toctree}
+:maxdepth: 1
+:caption: Releases
 
-## Contributing
-Please open issues for enhancements or inaccuracies. Ensure tests + type checks pass before PR.
+releases/index
+```
 
-## License
-Apache 2.0
+## Notes
+- Standalone runnable examples live in `examples/`.
+- Open issues and PRs on the repository; ensure tests and type checks pass.

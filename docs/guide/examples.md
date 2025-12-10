@@ -17,6 +17,14 @@ p.set_solver(ExactCoverQuantumSolver, encoding="simple")
 c = p.build_circuit()
 res = p.run_aer(shots=512)
 p.counts_plot(res, backend_alias="Local", shots=512)
+
+# Decode and display
+formatted = p.format_result(res)
+print(f"Success rate: {formatted['success_rate']:.1%}")
+top = formatted['solutions'][0]
+print("Top assignments:", top['assignments'][:5])
+if top['board'] is not None:
+    print("Filled board preview:", top['board'][:2])
 ```
 
 ## Use an existing 4x4 board

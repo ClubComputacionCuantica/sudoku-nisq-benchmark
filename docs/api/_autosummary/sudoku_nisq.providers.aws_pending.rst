@@ -1,12 +1,6 @@
-sudoku\_nisq.providers.aws\_pending
-===================================
+﻿sudoku\_nisq.providers.aws
+==========================
 
-.. automodule:: sudoku_nisq.providers.aws_pending
-
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      AWSProvider
-   
+.. automodule:: sudoku_nisq.providers.aws
+	:members:
+	:undoc-members:

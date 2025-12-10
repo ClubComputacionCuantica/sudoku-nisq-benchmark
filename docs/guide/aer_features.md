@@ -16,11 +16,13 @@ The sudoku-nisq-benchmark module now provides full access to these capabilities 
 
 ## Installation
 
-Basic installation:
+Basic installation (Aer included by default):
 
 ```bash
-pip install qiskit-aer
+pip install sudoku-nisq-benchmark
 ```
+
+The package depends on `qiskit-aer`, so CPU Aer simulation works out of the box.
 
 For GPU support (Linux x86_64 only):
 
@@ -32,6 +34,8 @@ pip install qiskit-aer-gpu
 pip install qiskit-aer-gpu-cu11
 ```
 
+Note: GPU builds are optional, mutually exclusive, and require a working NVIDIA CUDA installation. On Windows and macOS, use CPU Aer.
+
 ## Quick Start
 
 ### Basic Ideal Simulation
@@ -41,12 +45,51 @@ from sudoku_nisq import QSudoku
 from sudoku_nisq.solvers import ExactCoverQuantumSolver
 
 # Create puzzle
-puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=4)
-puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+puzzle = QSudoku.generate(size=2, num_missing_cells=4)
+puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
 
 # Run on Aer with default settings (automatic method selection)
 result = puzzle.run_aer(shots=1024)
 print(f"Measured {len(result.get_counts())} unique outcomes")
+```
+
+### Decoding and Display
+
+Convert counts into assignments and an optional filled board:
+
+```python
+formatted = puzzle.format_result(result)
+print(f"Success rate: {formatted['success_rate']:.1%}")
+top = formatted['solutions'][0]
+print("Top assignments:", top['assignments'][:5])
+if top['board'] is not None:
+    print("Filled board preview:", top['board'][:2])
+```
+
+For generic exact cover (no Sudoku board), you can inspect subset selections:
+
+```python
+counts = result.get_counts()
+bitstring, _ = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[0]
+bs = bitstring if isinstance(bitstring, str) else ''.join(str(b) for b in bitstring)
+decoded = puzzle._solver.decode_bitstring(bs)
+print("Selected indices:", decoded['selected_indices'])
+print("Selected subsets (sample):", list(decoded['selected_subsets'].items())[:3])
+```
+
+### Exact Cover Quick Demo (no Sudoku)
+
+```python
+from sudoku_nisq.q_exact_cover import QExactCover
+
+# Tiny example problem and circuit
+qec = QExactCover.create_small_example()
+circuit = qec.build_circuit(sdk="qiskit")
+print(f"Circuit qubits: {circuit.num_qubits}, depth: {circuit.depth()}")
+
+# Run on Aer
+result = qec.run_aer(shots=512, opt_level=1)
+print(f"Outcomes: {len(result['counts'])}")
 ```
 
 ### Specifying Simulation Method
@@ -668,5 +711,5 @@ result = puzzle.run_aer(shots=512)  # Instead of 4096
 
 - [Qiskit Aer Documentation](https://qiskit.github.io/qiskit-aer/)
 - [Error Mitigation Guide](error_mitigation.md)
-- [Backend Configuration](getting-started.md#backend-configuration)
+- {ref}`backend-configuration`
 - [Examples](examples.md)

@@ -351,10 +351,11 @@ class QuantumSolver(ABC):
             if flatten and hasattr(cache_circuit, 'n_qubits'):  # pytket circuit
                 FlattenRegisters().apply(cache_circuit)
             
-            # Persist (always save main circuit regardless of store_transpiled flag)
-            self.save_circuit(cache_circuit, path)
+            # Persist cache only if in pytket format (has to_dict)
+            if hasattr(cache_circuit, "to_dict"):
+                self.save_circuit(cache_circuit, path)
             
-            # Record main circuit resources using pytket format for consistency
+            # Record main circuit resources using available format
             main_res = self._get_circuit_resources(cache_circuit)
             
             # Track SDK type in metadata (explicit selection or auto-detected)
@@ -431,8 +432,12 @@ class QuantumSolver(ABC):
         
         if sdk_type == "qiskit":
             # Convert qiskit to pytket
-            from pytket.extensions.qiskit import qiskit_to_tk
-            return qiskit_to_tk(circuit)
+            try:
+                from pytket.extensions.qiskit import qiskit_to_tk
+                return qiskit_to_tk(circuit)
+            except Exception:
+                # If conversion tools are unavailable, skip conversion and cache as-is
+                return circuit
             
         elif sdk_type == "braket":
             # Convert braket to pytket (would need appropriate converter)
@@ -685,6 +690,11 @@ class QuantumSolver(ABC):
         # Native Qiskit execution uses backend.run()
         job = backend.run(circuit, shots=shots)
         result = job.result()
+        # Attach compiled circuit to result for downstream metrics
+        try:
+            setattr(result, 'compiled_circuit', circuit)
+        except Exception:
+            pass
         return result
     
     def _run_pytket(
@@ -807,6 +817,19 @@ class QuantumSolver(ABC):
         elif sdk_type == "qiskit":
             if not isinstance(compiled_circuit, QuantumCircuit):
                 raise TypeError(f"Expected Qiskit QuantumCircuit, got {type(compiled_circuit)}")
+
+        # Record last run context for metadata and metrics
+        try:
+            setattr(self, 'last_backend_alias', backend_alias)
+            setattr(self, 'last_opt_level', optimisation_level)
+            setattr(self, 'transpiled_circuit', compiled_circuit)
+            if sdk_type == "qiskit":
+                try:
+                    self.gate_counts = dict(compiled_circuit.count_ops())
+                except Exception:
+                    pass
+        except Exception:
+            pass
         
         # Apply error mitigation if requested
         if use_zne or use_pec:
@@ -1043,6 +1066,11 @@ class QuantumSolver(ABC):
         # Run simulation
         job = backend.run(transpiled_qc, shots=shots)
         result = job.result()
+        # Attach transpiled circuit to result for eta/eta2 computation
+        try:
+            setattr(result, 'compiled_circuit', transpiled_qc)
+        except Exception:
+            pass
         
         return result
     

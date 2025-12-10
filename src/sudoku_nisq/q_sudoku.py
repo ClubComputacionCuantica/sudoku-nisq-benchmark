@@ -1045,6 +1045,15 @@ class QSudoku():
         if not self._solver:
             raise ValueError("No solver set. Call set_solver() first.")
         return self._solver.run_aer(shots, **kwargs)
+
+    def format_result(self, result):
+        """Decode and format a backend result using the active solver.
+
+        Returns a dict with solutions, success rate, and optional mitigated rate.
+        """
+        if not self._solver:
+            raise ValueError("No solver set. Call set_solver() first.")
+        return self._solver.format_result(result)
     
     def counts_plot(self, counts=None, backend_alias=None, shots=None, top_n=20, 
                     show_valid_only=False, figsize=(12, 6), show_summary=True):

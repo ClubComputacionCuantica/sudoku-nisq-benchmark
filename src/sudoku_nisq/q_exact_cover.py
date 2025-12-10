@@ -21,8 +21,6 @@ if TYPE_CHECKING:
 
 class QExactCover:
     """
-    Lightweight quantum interface for general exact cover problems.
-    
     QExactCover provides a minimal wrapper for running quantum exact cover algorithms
     on arbitrary problem instances. Unlike QSudoku (which provides extensive puzzle
     management, multi-backend support, and visualization), QExactCover focuses on

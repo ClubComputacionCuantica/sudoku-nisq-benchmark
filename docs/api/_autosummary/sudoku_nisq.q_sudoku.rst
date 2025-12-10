@@ -1,12 +1,6 @@
-sudoku\_nisq.q\_sudoku
+﻿sudoku\_nisq.q\_sudoku
 ======================
 
-.. automodule:: sudoku_nisq.q_sudoku
+.. currentmodule:: sudoku_nisq
 
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      QSudoku
-   
+.. autodata:: q_sudoku

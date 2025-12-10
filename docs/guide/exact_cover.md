@@ -32,7 +32,7 @@ Every exact cover instance can be mapped to a canonical form:
 
 ```python
 U_n = {0, 1, ..., n-1}  # Indexed universe
-S = [{subset₀}, {subset₁}, ...]  # Subsets as index sets
+S = [{subset_0}, {subset_1}, ...]  # Subsets as index sets
 ```
 
 Two exact cover problems that differ only in element labels are **isomorphic** and produce the same canonical representation.
@@ -93,6 +93,21 @@ result = qec.run_aer(shots=1024)
 print(result['counts'])
 ```
 
+#### Inspecting Selected Subsets
+
+Decode a top bitstring to see which subsets were chosen:
+
+```python
+counts = result['counts']
+bitstring, _ = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[0]
+bs = bitstring if isinstance(bitstring, str) else ''.join(str(b) for b in bitstring)
+decoded = qec.solver.decode_bitstring(bs)
+print("Selected indices:", decoded['selected_indices'])
+print("Selected subsets (sample):", list(decoded['selected_subsets'].items())[:3])
+```
+
+Note: Sudoku board filling applies when using `QSudoku` (Sudoku mode). In generic exact-cover usage, focus on `selected_subsets`.
+
 ### Resource Estimation
 
 ```python
@@ -102,331 +117,25 @@ print(f"Qubits required: {resources['estimated']['n_qubits']}")
 print(f"Estimated gates: {resources['estimated']['n_gates']}")
 ```
 
-## API Reference
+## Canonical Encoding (overview)
 
-### ExactCoverProblem
+`ExactCoverProblem` supports a canonical encoding that maps any instance to a
+unique binary string, up to relabeling of universe elements. This is mainly
+useful for:
 
-Core dataclass representing an exact cover instance.
+- Detecting isomorphic instances
+- Deduplicating benchmark datasets
+- Defining a global ordering over all finite exact cover problems
 
-#### Constructor
-
-```python
-ExactCoverProblem(
-    universe: List[Any],
-    subsets: Dict[str, List[Any]],
-    num_solutions: Optional[int] = 1,
-    metadata: Optional[Dict[str, Any]] = None
-)
-```
-
-**Parameters:**
-- `universe`: List of hashable elements (any objects)
-- `subsets`: Dictionary mapping subset names to element lists
-- `num_solutions`: Expected number of solutions (for resource estimation)
-- `metadata`: Optional metadata dictionary
-
-**Validation:**
-- Universe must be non-empty
-- No duplicate elements in universe
-- All subset elements must be in universe
-- No duplicate elements within individual subsets
-
-#### Methods
-
-##### `validate()`
-
-Validates the problem structure. Called automatically on construction.
-
-```python
-problem.validate()  # Raises ValueError if invalid
-```
-
-##### `canonicalize()`
-
-Converts to canonical indexed form.
-
-```python
-n, canonical_subsets = problem.canonicalize()
-# n: universe size
-# canonical_subsets: List[Set[int]] with elements as indices
-```
-
-**Example:**
-```python
-universe = ['a', 'b', 'c']
-subsets = {'S_0': ['a', 'b'], 'S_1': ['b', 'c']}
-problem = ExactCoverProblem(universe, subsets)
-
-n, canon = problem.canonicalize()
-# n = 3
-# canon = [{0, 1}, {1, 2}]  # 'a'→0, 'b'→1, 'c'→2
-```
-
-##### `get_hash()`
-
-Computes hash of canonical representation for caching.
-
-```python
-hash_str = problem.get_hash()  # Returns hex string
-```
-
-Isomorphic problems (differing only in labels) produce the same hash.
-
-##### `to_incidence_matrix()`
-
-Converts to binary incidence matrix representation.
-
-```python
-matrix = problem.to_incidence_matrix()
-# Returns List[List[int]] - n×m binary matrix
-```
-
-##### `from_incidence_matrix(matrix, num_solutions=None)` (classmethod)
-
-Creates problem from incidence matrix.
-
-```python
-matrix = [[1, 0], [1, 1], [0, 1]]
-problem = ExactCoverProblem.from_incidence_matrix(matrix)
-# Universe: [0, 1, 2]
-# Subsets: {'S_0': [0, 1], 'S_1': [1, 2]}
-```
-
-##### `enumerate_instances(max_n, max_m, max_total)` (staticmethod)
-
-Generator yielding all exact cover instances up to size limits.
-
-```python
-# Generate all 2×2 instances
-for problem in ExactCoverProblem.enumerate_instances(max_n=2, max_m=2):
-    print(problem.universe, problem.subsets)
-```
-
-**Warning:** Generates $2^{n \cdot m}$ instances. Use small limits!
-
-##### `count_solutions(max_solutions=None)`
-
-Count the number of exact cover solutions using backtracking search.
-
-```python
-# Count all solutions
-num_solutions = problem.count_solutions()
-
-# Check if solvable (SAT check)
-has_solution = problem.count_solutions(max_solutions=1) > 0
-
-# Early termination after finding N solutions
-count = problem.count_solutions(max_solutions=10)
-```
-
-**Parameters:**
-- `max_solutions`: Optional cap on solutions to count (for early termination)
-
-**Returns:**
-- `int`: Number of exact covers found (<= max_solutions if provided)
-
-**Note:** Uses exponential backtracking; intended for small/medium instances or validation.
-
-##### `to_canonical_matrix()`
-
-Computes the canonical incidence matrix representation.
-
-```python
-canonical_matrix, ordered_universe = problem.to_canonical_matrix()
-```
-
-The canonical matrix is constructed by:
-1. Ordering universe elements canonically (sorted)
-2. Converting each subset to a column bitvector
-3. Removing duplicate columns
-4. Sorting columns lexicographically
-
-**Returns:**
-- Tuple `(canonical_matrix, ordered_universe)` where:
-  - `canonical_matrix`: List[List[int]] - n×m* canonical 0-1 matrix
-  - `ordered_universe`: List[Any] - canonically ordered universe elements
-
-**Example:**
-```python
-universe = ['b', 'a', 'c']
-subsets = {'S_0': ['a', 'b'], 'S_1': ['b', 'c'], 'S_2': ['a', 'b']}
-problem = ExactCoverProblem(universe, subsets)
-
-matrix, ordered_u = problem.to_canonical_matrix()
-# ordered_u = ['a', 'b', 'c']
-# S_0 and S_2 are duplicates, removed
-# Columns sorted lexicographically
-```
-
-**Note:** This produces a unique matrix representation independent of original labeling/ordering.
-
-##### `to_canonical_encoding()`
-
-Encodes the problem as a canonical binary string.
+For typical usage you only need two methods:
 
 ```python
 encoding = problem.to_canonical_encoding()
-```
-
-Implements the encoding scheme:
-$$\text{enc}(A^*) = \text{un}(n) \; ; \; \text{un}(m) \; ; \; \text{bits}(A^*)$$
-
-where:
-- $\text{un}(k) = \underbrace{1 \cdots 1}_k \, 0$ (unary encoding of integer k)
-- $\text{bits}(A^*)$ = all matrix entries in row-major order
-
-**Returns:**
-- `str`: Binary string encoding (e.g., "1101100110...")
-
-**Example:**
-```python
-# 2×2 identity matrix
-matrix = [[1, 0], [0, 1]]
-problem = ExactCoverProblem.from_incidence_matrix(matrix)
-encoding = problem.to_canonical_encoding()
-# After canonicalization: matrix becomes [[0,1], [1,0]]
-# un(2) = "110", un(2) = "110", bits = "0110"
-# Result: "1101100110"
-```
-
-**Mathematical Properties:**
-- Two exact cover instances have the same encoding ⟺ they have the same canonical incidence matrix
-- Defines an injective mapping from exact cover instances to binary strings
-- Induces a total order via shortlex on $\{0,1\}^*$
-
-##### `canonical_order_index()`
-
-Computes the position of this instance in the global shortlex order.
-
-```python
 index = problem.canonical_order_index()
 ```
 
-The shortlex order on binary strings:
-- First by length (shorter < longer)
-- Then lexicographically (for equal length)
-
-This induces a bijection between $\mathbb{N}$ and all finite binary strings, hence a total order $I_0 \prec I_1 \prec I_2 \prec \cdots$ on all finite exact cover instances.
-
-**Returns:**
-- `int`: The index in the global ordering (starting from 0)
-
-**Example:**
-```python
-# Small instances have small indices
-# Indices grow doubly exponentially with problem size
-problem = ExactCoverProblem.from_incidence_matrix([[1, 0], [0, 1]])
-idx = problem.canonical_order_index()
-# idx = 1893 (for encoding "1101100110")
-```
-
-**Warning:** For non-trivial instances, this index can be astronomically large (e.g., $> 2^{1000}$). Primarily useful for:
-- Theoretical analysis
-- Small instance comparison  
-- Formal proofs about problem space structure
-
-Do not attempt to enumerate all instances up to a large index!
-
-##### `create_small_example()` (staticmethod)
-
-Returns a predefined small example for testing.
-
-```python
-problem = ExactCoverProblem.create_small_example()
-# 4-element, 6-subset problem with 1 solution
-```
-
-### QExactCover
-
-Lightweight quantum interface for exact cover problems.
-
-#### Constructor
-
-```python
-QExactCover(
-    problem: ExactCoverProblem,
-    cache_base: Optional[str] = None
-)
-```
-
-**Parameters:**
-- `problem`: ExactCoverProblem instance
-- `cache_base`: Optional cache directory for circuits
-
-#### Properties
-
-```python
-qec.universe       # Access problem universe
-qec.subsets        # Access problem subsets  
-qec.num_solutions  # Expected solution count
-```
-
-#### Methods
-
-##### `build_circuit(sdk="qiskit")`
-
-Builds quantum circuit for exact cover algorithm.
-
-```python
-circuit = qec.build_circuit(sdk="qiskit")  # or "pytket"
-```
-
-Returns circuit object in specified SDK format.
-
-##### `run_aer(shots=1024, memory=False, opt_level=0)`
-
-Runs circuit on Qiskit Aer simulator.
-
-```python
-result = qec.run_aer(shots=512, opt_level=1)
-```
-
-**Returns:**
-```python
-{
-    'counts': Dict[str, int],      # Measurement counts
-    'memory': List[str],           # Individual shots (if memory=True)
-    'metadata': Dict[str, Any]     # Execution info
-}
-```
-
-##### `report_resources()`
-
-Gets resource estimates and actual circuit metrics.
-
-```python
-resources = qec.report_resources()
-```
-
-**Returns:**
-```python
-{
-    'problem': {
-        'universe_size': int,
-        'num_subsets': int,
-        'num_solutions': int
-    },
-    'estimated': {
-        'n_qubits': int,
-        'n_gates': int,
-        'MCX_gates': int,
-        'depth': Optional[int]
-    },
-    'actual': {  # Only if circuit built
-        'n_qubits': int,
-        'depth': int,
-        'size': int
-    }
-}
-```
-
-##### `create_small_example(cache_base=None)` (staticmethod)
-
-Factory method creating QExactCover with example problem.
-
-```python
-qec = QExactCover.create_small_example()
-```
+See `{doc}`canonical_encoding` for the full mathematical definition,
+complexity analysis, and additional usage patterns.
 
 ## Examples
 
@@ -794,23 +503,7 @@ The induced order $\prec$ on exact cover instances is:
 - **Well-founded**: Every non-empty set has a minimal element
 - **Computable**: Given instances $I_1, I_2$, we can determine $I_1 \prec I_2$ by comparing encodings
 
-### Applications
-
-1. **Systematic Benchmarking**: Enumerate small instances systematically
-2. **Deduplication**: Detect isomorphic problem instances via encoding comparison
-3. **Hardness Analysis**: Study how complexity metrics correlate with shortlex position
-4. **Theoretical Foundations**: Formal proofs about exact cover problem space structure
-
-### References
-
-This canonical encoding framework provides a rigorous mathematical foundation for comparing exact cover instances, generalizing techniques from:
-- Kolmogorov complexity (universal enumeration of objects)
-- Descriptive complexity theory (canonical representatives)
-- Combinatorial enumeration (systematic generation)
-
 ## See Also
 
-- [Architecture Guide](architecture.md) - System design and components
 - [Examples](examples.md) - Code examples and notebooks
 - [Getting Started](getting-started.md) - Installation and basic usage
-- `examples/exact_cover_benchmark.py` - Complete benchmark script

@@ -176,7 +176,7 @@ class AerProvider(QuantumProvider):
             Enable automatic qubit blocking for large circuits.
         blocking_qubits : int, default 5
             Qubits per block for blocked simulation.
-        **backend_options
+        ``backend_options``
             Additional AerSimulator backend options.
         
         Returns
@@ -295,7 +295,7 @@ class AerProvider(QuantumProvider):
             Simulation method to use.
         alias : str, optional
             Custom alias for the backend.
-        **kwargs
+        ``kwargs``
             Additional arguments passed to add_device (method, noise_model, etc.).
         
         Returns

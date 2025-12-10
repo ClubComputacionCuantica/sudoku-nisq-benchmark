@@ -1,12 +1,5 @@
-sudoku\_nisq.backtracking\_solver
+﻿sudoku\_nisq.backtracking\_solver
 =================================
 
-.. automodule:: sudoku_nisq.backtracking_solver
-
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      BacktrackingQuantumSolver
-   
+.. automodule:: sudoku_nisq.solvers.backtracking_solver
+	:noindex:

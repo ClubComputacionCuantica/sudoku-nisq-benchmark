@@ -1,12 +1,6 @@
-sudoku\_nisq.sudoku\_puzzle
+﻿sudoku\_nisq.sudoku\_puzzle
 ===========================
 
-.. automodule:: sudoku_nisq.sudoku_puzzle
+.. currentmodule:: sudoku_nisq
 
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      SudokuPuzzle
-   
+.. autodata:: sudoku_puzzle

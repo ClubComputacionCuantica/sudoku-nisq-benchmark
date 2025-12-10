@@ -280,6 +280,222 @@ class ExactCoverQuantumSolver(QuantumSolver):
             )
     
     def _transpile_qiskit(self, backend, opt_level: int):
+
+            # -------------------------
+            # Decoding & result helpers
+            # -------------------------
+            def decode_bitstring(self, bitstring: str) -> Dict[str, Any]:
+                """Decode a measurement bitstring into selected subsets and assignments.
+
+                For Sudoku mode, attempts to extract (row, col, digit) assignments from
+                subset contents when available. For generic exact cover mode, returns the
+                selected subset keys and their raw contents.
+
+                Returns a dict with:
+                  - 'selected_indices': list[int]
+                  - 'selected_subsets': dict[str, list]
+                  - 'assignments': list[tuple]  # best-effort (row,col,digit) if available
+                """
+                selected_indices = [i for i, b in enumerate(bitstring) if b == '1']
+                selected_subsets = {f'S_{i}': self.subsets.get(f'S_{i}', []) for i in selected_indices}
+
+                assignments = []
+                # Best-effort extraction of (row, col, digit) tuples if present
+                for items in selected_subsets.values():
+                    for entry in items:
+                        if isinstance(entry, tuple) and len(entry) == 3 and all(isinstance(x, int) for x in entry):
+                            assignments.append(entry)
+
+                return {
+                    'selected_indices': selected_indices,
+                    'selected_subsets': selected_subsets,
+                    'assignments': assignments,
+                }
+
+            def apply_assignments(self, assignments: List[tuple]) -> Optional[list]:
+                """Apply (row, col, digit) assignments to a copy of the puzzle board.
+
+                Returns a new board (list[list[int]]) if in Sudoku mode and a puzzle is
+                available; otherwise returns None.
+                """
+                if hasattr(self, 'puzzle') and self.puzzle is not None and hasattr(self.puzzle, 'board'):
+                    # Deep-copy board
+                    import copy
+                    board = copy.deepcopy(self.puzzle.board)
+                    for (r, c, d) in assignments:
+                        if 0 <= r < len(board) and 0 <= c < len(board[r]):
+                            board[r][c] = d
+                    return board
+                return None
+
+            def decode_counts(self, counts: Dict[str, int], *, k_top: int = 3) -> Dict[str, Any]:
+                """Convert counts to structured solution metrics and ranking.
+
+                Returns dict with:
+                  - 'solutions': [{ 'bitstring', 'prob', 'selected_indices', 'selected_subsets', 'assignments', 'board', 'is_valid' }]
+                  - 'success_rate': total probability mass on valid exact covers
+                  - 'topk_solution_mass': sum of probabilities of top-k valid covers (default k=3)
+                  - 'precision_at_k': fraction of top-k bitstrings overall that are valid covers
+                  - 'recall_at_k': fraction of all valid covers that appear among top-k overall
+                  - 'distinct_solutions_observed': number of valid covers observed (count>0)
+                  - 'snr': ratio of best valid prob to best invalid prob
+                """
+                total = sum(counts.values()) or 1
+
+                # Probabilities per bitstring and overall ranking
+                probs = { (bitstring if isinstance(bitstring, str) else ''.join(str(b) for b in bitstring)) : c / total
+                          for bitstring, c in counts.items() }
+                all_sorted = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
+
+                # Build solutions list with validity flags and decoded info
+                solutions = []
+                for bs, p in all_sorted:
+                    dec = self.decode_bitstring(bs)
+                    board = self.apply_assignments(dec['assignments']) if dec['assignments'] else None
+                    is_valid = False
+                    try:
+                        is_valid = self._is_valid_solution(bs)
+                    except Exception:
+                        is_valid = False
+                    solutions.append({
+                        'bitstring': bs,
+                        'prob': p,
+                        **dec,
+                        'board': board,
+                        'is_valid': is_valid,
+                    })
+
+                # Success probability = total mass on valid exact covers
+                success_rate = sum(p for bs, p in all_sorted if next((s for s in solutions if s['bitstring'] == bs), {}).get('is_valid', False))
+
+                # Top-k solution mass (k most probable valid covers)
+                valid_sorted = [(s['bitstring'], s['prob']) for s in solutions if s['is_valid']]
+                valid_sorted.sort(key=lambda kv: kv[1], reverse=True)
+                topk_solution_mass = sum(p for _, p in valid_sorted[:k_top])
+
+                # Precision@k and Recall@k over overall top-k bitstrings
+                topk_all = solutions[:k_top]
+                n_sol_in_topk = sum(1 for s in topk_all if s['is_valid'])
+                precision_at_k = n_sol_in_topk / (k_top or 1)
+                # Estimate total number of valid covers via problem enumeration if available
+                try:
+                    total_valid = len(self.problem.enumerate_valid_bitstrings())
+                except Exception:
+                    total_valid = len(valid_sorted)
+                recall_at_k = (n_sol_in_topk / (total_valid or 1)) if total_valid else 0.0
+
+                # Distinct valid solutions observed
+                # Use counts-based observation (count > 0)
+                observed_valid = set()
+                for s in solutions:
+                    if s['is_valid'] and counts.get(s['bitstring'], 0) > 0:
+                        observed_valid.add(s['bitstring'])
+                distinct_solutions_observed = len(observed_valid)
+
+                # SNR between best valid and best invalid
+                best_valid = max((s['prob'] for s in solutions if s['is_valid']), default=0.0)
+                best_invalid = max((s['prob'] for s in solutions if not s['is_valid']), default=0.0)
+                snr = (best_valid / best_invalid) if best_invalid > 0 else (float('inf') if best_valid > 0 else 0.0)
+
+                return {
+                    'solutions': solutions,
+                    'success_rate': success_rate,
+                    'topk_solution_mass': topk_solution_mass,
+                    'precision_at_k': precision_at_k,
+                    'recall_at_k': recall_at_k,
+                    'distinct_solutions_observed': distinct_solutions_observed,
+                    'snr': snr,
+                }
+
+    def format_result(self, result: Any) -> Dict[str, Any]:
+        """Format a backend-native Result into a decoded solution structure.
+
+        Extracts counts via result.get_counts(), decodes solutions, and attaches
+        mitigated success rate if present on the Result object.
+        """
+        counts = result.get_counts()
+        out = self.decode_counts(counts)
+        if hasattr(result, '_mitigated_success_prob'):
+            out['mitigated_success_rate'] = result._mitigated_success_prob
+        # Attach eta metrics using compiled circuit resources if available
+        try:
+            from sudoku_nisq.metrics import compute_eta_metrics
+            # Prefer transpiled circuit if present on result or solver
+            depth = None
+            gate_counts = None
+            sdk = 'qiskit'
+            # If result carries the compiled circuit
+            compiled = getattr(result, 'compiled_circuit', None)
+            if compiled is None:
+                compiled = getattr(self, 'transpiled_circuit', None)
+            if compiled is not None and hasattr(compiled, 'depth'):
+                try:
+                    depth = compiled.depth()
+                except Exception:
+                    pass
+                try:
+                    gate_counts = dict(compiled.count_ops())
+                except Exception:
+                    pass
+            # Fallback to any stored gate_counts
+            if gate_counts is None:
+                gate_counts = getattr(self, 'gate_counts', None)
+            eta_metrics = compute_eta_metrics(out.get('success_rate'), gate_counts=gate_counts, depth=depth, sdk=sdk)
+            out.update(eta_metrics)
+        except Exception:
+            pass
+        # Compute 95% CI for success_rate based on total shots
+        try:
+            from sudoku_nisq.metrics import binomial_ci_normal
+            total_shots = sum(counts.values()) if isinstance(counts, dict) else None
+            p_hat = out.get('success_rate')
+            if total_shots:
+                ci = binomial_ci_normal(p_hat, total_shots, level=0.95)
+                if ci:
+                    out['ci_95_low'], out['ci_95_high'] = ci
+                    out['shots'] = total_shots
+        except Exception:
+            pass
+        # Compute shots for 99% success if success_rate available
+        try:
+            from sudoku_nisq.metrics import shots_for_target_success
+            s99 = shots_for_target_success(out.get('success_rate'), target=0.99)
+            out['shots_for_99pct'] = s99
+        except Exception:
+            pass
+        # Persist execution metrics to metadata if manager is available
+        try:
+            if hasattr(self, 'metadata_manager') and self.metadata_manager is not None:
+                metrics_to_store = {
+                    'success_rate': out.get('success_rate'),
+                    'topk_solution_mass': out.get('topk_solution_mass'),
+                    'precision_at_k': out.get('precision_at_k'),
+                    'recall_at_k': out.get('recall_at_k'),
+                    'distinct_solutions_observed': out.get('distinct_solutions_observed'),
+                    'snr': out.get('snr'),
+                    'eta': out.get('eta'),
+                    'eta2': out.get('eta2'),
+                    'G_total': out.get('G_total'),
+                    'G_2q': out.get('G_2q'),
+                    'depth': out.get('depth'),
+                    'shots_for_99pct': out.get('shots_for_99pct'),
+                    'ci_95_low': out.get('ci_95_low'),
+                    'ci_95_high': out.get('ci_95_high'),
+                    'shots': out.get('shots'),
+                }
+                # Attempt to derive backend alias and opt level from recent run context
+                backend_alias = getattr(self, 'last_backend_alias', 'unknown')
+                opt_level = getattr(self, 'last_opt_level', 0)
+                self.metadata_manager.record_execution_metrics(
+                    solver_name=self.__class__.__name__,
+                    encoding=getattr(self, 'encoding', 'default'),
+                    backend_alias=backend_alias,
+                    opt_level=opt_level,
+                    metrics=metrics_to_store,
+                )
+        except Exception:
+            pass
+        return out
         """Transpile circuit using Qiskit's preset pass manager with Target integration.
         
         Uses generate_preset_pass_manager() for full 6-stage transpilation pipeline:

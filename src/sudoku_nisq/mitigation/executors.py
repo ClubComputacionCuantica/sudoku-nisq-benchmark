@@ -39,14 +39,12 @@ COMPLETE flow including circuit format conversions:
                         ▼
     ┌─────────────────────────────────────────────────────────┐
     │     Backend (via BackendManager)                        │
-    │  • IBM Quantum  → qiskit backend wrapper         │
-    │  • Quantinuum   → pytket-quantinuum (native pytket)     │
+    │  • IBM Quantum  → qiskit backend wrapper                │
+    │  • Quantinuum   → qnexus backend wrapper                │
     │  • Aer Simulator → pytket-qiskit AerBackend             │
     │  Note: AWS Braket uses native Braket SDK (not pytket)   │
     │        and requires different circuit conversion        │
     └─────────────────────────────────────────────────────────┘
-
-**CRITICAL: Mitiq doesn't know your backends are Quantinuum/IBM/etc!**
 
 Mitiq thinks it's always working with Qiskit circuits.
 1. Receives Qiskit circuit from Mitiq (after noise scaling)
@@ -173,16 +171,6 @@ When you call ``solver.run(backend, use_zne=True)``, the flow is:
 5. **Executor** computes success probability and returns to Mitiq
 6. **Mitiq** extrapolates to zero-noise estimate
 7. **QuantumSolver** attaches result as ``._mitigated_success_prob``
-
-Why This Design Works
-======================
-
-✅ **Provider-agnostic**: Works with IBM, Quantinuum (pytket-compatible backends)
-✅ **Zero code duplication**: Reuses your existing backend infrastructure
-✅ **Type-safe**: pytket-compatible backends have unified interface
-✅ **Extensible**: New pytket-compatible providers work automatically
-✅ **Testable**: Can use Aer simulator for testing mitigation
-✅ **Maintainable**: Backend changes don't affect mitigation code
 
 Example Usage
 =============

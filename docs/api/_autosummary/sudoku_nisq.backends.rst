@@ -1,12 +1,6 @@
-sudoku\_nisq.backends
+﻿sudoku\_nisq.backends
 =====================
 
-.. automodule:: sudoku_nisq.backends
+.. currentmodule:: sudoku_nisq
 
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      BackendManager
-   
+.. autodata:: backends

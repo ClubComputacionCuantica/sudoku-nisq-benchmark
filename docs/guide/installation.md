@@ -10,8 +10,8 @@ This project is distributed as a Python package and built with Poetry. You can i
 ## Users (pip)
 ```bash
 # Clone the repository (if using the source)
-# git clone https://github.com/ClubComputacionCuantica/sudoku-nisq-benchmark.git
-# cd sudoku-nisq-benchmark
+git clone https://github.com/ClubComputacionCuantica/sudoku-nisq-benchmark.git
+cd sudoku-nisq-benchmark
 
 # Install in editable mode
 pip install -e .
@@ -31,13 +31,9 @@ poetry run sphinx-build -b html docs docs/_build/html
 ```
 
 ## Optional provider SDKs
-Some features require vendor SDKs which are mocked during docs build:
+Some features require vendor SDKs:
 - IBM: `qiskit`, `qiskit-ibm-runtime`
-- Quantinuum (TKET): `pytket`, `pytket-quantinuum`
+- Quantinuum (TKET): `pytket`, `qnexus`
 - AWS Braket: `amazon-braket-sdk`
 
 Install only what you need for your workflow.
-
-```{note}
-Docs builds mock these packages (`autodoc_mock_imports` in `conf.py`) so you don’t need them to build documentation.
-```

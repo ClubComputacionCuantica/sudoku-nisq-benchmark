@@ -1,11 +1,6 @@
 """Sphinx configuration for Sudoku NISQ Benchmark.
 
 TODO:
-- Add intersphinx mappings for Qiskit, Braket, Pytket when stable.
-- Evaluate enabling autodoc typehints description vs signature.
-- Add version auto-population from package metadata.
-- Add sphinx.ext.doctest once examples are cleaned.
-- Add sphinx.ext.intersphinx after dependency docs verified.
 """
 from __future__ import annotations
 import os
@@ -43,8 +38,8 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'myst_parser',  # Enable Markdown pages
+    'sphinx.ext.mathjax',  # Render LaTeX math via MathJax
     # 'sphinx.ext.doctest',      # TODO: enable after verifying examples
-    'sphinx_autodoc_typehints',
 ]
 
 # Optional quality-of-life extensions
@@ -71,6 +66,8 @@ autodoc_default_options = {
     'undoc-members': False,
     'show-inheritance': True,
 }
+# Avoid duplicate object descriptions in index; rely on primary pages
+autodoc_default_options.update({'no-index': True})
 autodoc_typehints = 'description'
 
 # TODOs in documentation
@@ -79,7 +76,19 @@ todo_include_todos = True
 # MyST configuration
 myst_enable_extensions = [
     'colon_fence',  # ::: blocks (MyST)
+    'dollarmath',   # $...$ and $$...$$ math support
+    'amsmath',      # LaTeX amsmath environments
 ]
+
+# MathJax v3 configuration (optional macros)
+mathjax_path = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js'
+mathjax3_config = {
+    'tex': {
+        'macros': {
+            # Example: '\\RR': '\\mathbb{R}',
+        }
+    }
+}
 
 def skip_member(app, what, name, obj, skip, options):  # noqa: D401
     """Hook to customize skipping.
@@ -149,6 +158,7 @@ html_extra_path = ['robots.txt']
 
 # Mock heavy/optional dependencies during autodoc to keep builds light
 autodoc_mock_imports = [
+    'sudoku_nisq',
     'qiskit',
     'qiskit_ibm_runtime',
     'pytket',
@@ -171,3 +181,18 @@ intersphinx_mapping = {
 
 # TODO: Add nitpicky mode when doc coverage is sufficient
 # nitpicky = True
+
+# Exclude internal docs from published site
+exclude_patterns = [
+    'internal/**',  # docs/internal/*
+]
+html_theme_options = {
+     # Keep nav predictable; Furo orders by toctree.
+     'sidebar_hide_name': False,
+}
+
+# Reduce noise from autosummary-generated stub pages not linked explicitly
+suppress_warnings = [
+    'orphan',
+    'autodoc',
+]

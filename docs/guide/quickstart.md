@@ -22,6 +22,19 @@ print("counts:", result.get_counts())
 
 # 4) Plot counts (optional)
 puzzle.counts_plot(result, backend_alias="Local", shots=256)
+```
+
+## Decoding Results
+After running, decode measured outcomes into assignments and an optional filled board.
+
+```python
+formatted = puzzle.format_result(result)
+print(f"Success rate: {formatted['success_rate']:.1%}")
+top = formatted['solutions'][0]
+print("Top bitstring:", top['bitstring'])
+print("Top assignments:", top['assignments'][:5])
+if top['board'] is not None:
+    print("Filled board preview:", top['board'][:2])
 
 # 5) Resource summary (from metadata)
 summary = puzzle.report_resources()
@@ -62,9 +75,6 @@ print("counts:", result.get_counts())
 ```
 
 ```{note}
-- For 2x2 puzzles with no real subgrids, use `QSudoku.generate(size=2, subgrid_size=1, ...)`.
+- For 2x2 puzzles with no real subgrids, use `QSudoku.generate(size=2, ...)`.
 - For 4x4 puzzles with proper 2x2 subgrids, use `QSudoku.generate(size=4, ...)` or load from board.
-- For Quantinuum via TKET, see `QSudoku.init_quantinuum(...)`.
-- The docs mock SDKs during build; you'll need the real SDKs for execution.
-- Native Braket circuit builder is available via `build_circuit(sdk="braket")`; transpilation occurs server-side.
 ```

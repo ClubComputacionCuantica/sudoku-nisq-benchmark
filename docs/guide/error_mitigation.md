@@ -161,6 +161,19 @@ When `use_zne=True`:
 3. Perform a standard execution for counts.
 4. Attach `result._mitigated_success_prob`.
 
+### Decoding with Mitigation
+
+You can decode counts into assignments and boards while also reporting mitigation:
+
+```python
+formatted = puzzle.format_result(result)
+print(f"Success rate: {formatted['success_rate']:.1%}")
+if 'mitigated_success_rate' in formatted:
+    print(f"Mitigated success rate: {formatted['mitigated_success_rate']:.1%}")
+top = formatted['solutions'][0]
+print("Top assignments:", top['assignments'][:5])
+```
+
 Similar for `use_pec=True` (mutually exclusive at present).
 
 ---

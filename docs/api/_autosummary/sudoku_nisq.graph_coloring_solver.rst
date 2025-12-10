@@ -1,12 +1,5 @@
-sudoku\_nisq.graph\_coloring\_solver
+﻿sudoku\_nisq.graph\_coloring\_solver
 ====================================
 
-.. automodule:: sudoku_nisq.graph_coloring_solver
-
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      GraphColoringQuantumSolver
-   
+.. automodule:: sudoku_nisq.solvers.graph_coloring_solver
+	:noindex:

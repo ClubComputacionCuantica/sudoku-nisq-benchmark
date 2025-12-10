@@ -1,12 +1,6 @@
-sudoku\_nisq.quantum\_solver
+﻿sudoku\_nisq.quantum\_solver
 ============================
 
-.. automodule:: sudoku_nisq.quantum_solver
+.. currentmodule:: sudoku_nisq
 
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      QuantumSolver
-   
+.. autodata:: quantum_solver

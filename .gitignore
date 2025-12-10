@@ -27,8 +27,9 @@ Thumbs.db
 # Quantum solver cache
 .quantum_solver_cache/
 
-# Demo cache
-.demo_cache/
+# Test cache
+.test_cache/
+.test_cache_*/
 
 # Distribution/packaging
 build/

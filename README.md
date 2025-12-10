@@ -36,7 +36,6 @@ This makes Sudoku accessible to study current limitations of quantum devices.
 - **Multiple Solver Algorithms and Encodings**: Framework scaffolding for multiple solvers; currently only `ExactCoverQuantumSolver` is functional.
 - **Hardware Integration (IBM Tested)**: IBM Quantum backends are the only provider actively tested and supported right now. Quantinuum and Braket hooks exist as placeholders/in development and are not yet stable for end users.
 - **Circuit Caching and Memory Management**: Intelligent caching to avoid redundant computation.
-- **Automated Benchmarking**: `ExperimentRunner` (work in progress) for systematic evaluation across solvers, encodings, backends, and optimization levels.
 
 > Note: Provider abstractions expose aliases for future devices, but non‑IBM backends may raise `NotImplementedError` or produce incomplete results until native circuits and authentication flows are finalized.
 
