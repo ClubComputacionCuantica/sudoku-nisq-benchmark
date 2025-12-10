@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "pytket (>=2.7.0,<3.0.0)",
-    "pytket-qiskit (>=0.69.0,<0.70.0)",
+    "pytket-qiskit (>=0.74.0,<0.75.0)",
   "qiskit-aer (>=0.17.1,<0.18.0)",
     "matplotlib (>=3.10.3,<4.0.0)",
     "py-sudoku (>=2.0.0,<3.0.0)",

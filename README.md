@@ -182,7 +182,7 @@ The framework aims to:
 - Only the **ExactCoverQuantumSolver** is fully implemented; other solvers are placeholders.
 - Real hardware cannot yet reliably solve even small 4x4 puzzles.
 - Circuits are not yet fully optimized.
-- Only IBM Quantum backends are currently supported; Quantinuum and others are not yet functional.
+- Only IBM Quantum backends are currently supported; Quantinuum and others are not yet tested.
 
 ---
 
@@ -194,9 +194,12 @@ The framework aims to:
 
 ---
 
-### Documentation & Versioning
+## Citation
 
-The hosted documentation currently tracks the active development branch (`dev`). Once the project stabilizes, the docs workflow will switch to `main` and versioned snapshots (tags) may be published for each release (e.g., `v0.x`). Until then, source links in API pages reference the `dev` branch.
+If using this benchmarking system in research, please cite:
+- The sudoku-nisq-benchmark project
+- Relevant quantum benchmarking standards papers
+- Provider-specific calibration papers (if using hardware data)
 
 ---
 

@@ -77,7 +77,7 @@ def compare_resources():
     
     print(f"Board size: {sudoku.board_size}×{sudoku.board_size}")
     print(f"Missing cells: {sudoku.num_missing_cells}")
-    print(f"Puzzle board:")
+    print("Puzzle board:")
     for row in sudoku.board:
         print(f"  {row}")
     print()

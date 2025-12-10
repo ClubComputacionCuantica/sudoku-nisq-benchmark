@@ -79,7 +79,7 @@ def _build_counter_braket(
     solver,
     S_qubits: List[int],
     U_regs: List[List[int]],
-    counter: GateCounter = None,
+    counter: GateCounter | None = None,
 ) -> Circuit:
     """Build the counting subcircuit for Braket.
 
@@ -137,7 +137,7 @@ def _build_counter_braket(
 def _build_oracle_braket(
     U_regs: List[List[int]],
     anc_qubit: int,
-    counter: GateCounter = None,
+    counter: GateCounter | None = None,
 ) -> Circuit:
     """Build the oracle subcircuit:
 
@@ -190,7 +190,7 @@ def _build_oracle_braket(
     return oracle
 
 
-def _build_diffuser_braket(S_qubits: List[int], counter: GateCounter = None, decompose_cnz: bool = True) -> Circuit:
+def _build_diffuser_braket(S_qubits: List[int], counter: GateCounter | None = None, decompose_cnz: bool = True) -> Circuit:
     """Standard Grover diffuser on subset register S in Braket.
     
     Args:

@@ -58,7 +58,7 @@ class MemoryTracker:
         current = self._get_memory_mb()
         return current - self.snapshots[from_label]
         
-    def report(self) -> Dict[str, float]:
+    def report(self) -> Dict[str, float | dict[str, float]]:
         """Generate memory usage report.
         
         Returns:
@@ -70,12 +70,13 @@ class MemoryTracker:
             - 'snapshots': All recorded snapshots
         """
         current = self._get_memory_mb()
+        snapshots_dict: dict[str, float] = {k: v for k, v in self.snapshots.copy().items()}
         return {
             'initial_mb': self.initial_memory or 0.0,
             'current_mb': current,
             'peak_mb': self.peak(),
             'delta_mb': current - (self.initial_memory or 0.0),
-            'snapshots': self.snapshots.copy()
+            'snapshots': snapshots_dict
         }
         
     def _get_memory_mb(self) -> float:

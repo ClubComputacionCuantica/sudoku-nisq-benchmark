@@ -72,7 +72,7 @@ def _compute_grover_iterations(solver) -> int:
 # Subcircuit builders (native Qiskit)
 # ---------------------------------------------------------------------------
 
-def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRegister], counter: GateCounter = None) -> QuantumCircuit:
+def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRegister], counter: GateCounter | None = None) -> QuantumCircuit:
     """Build the counting subcircuit.
 
     Reproduces the cascaded multi-controlled-X construction from the deprecated
@@ -124,7 +124,7 @@ def _build_counter_qiskit(solver, S_reg: QuantumRegister, U_regs: list[QuantumRe
     return count
 
 
-def _build_oracle_qiskit(U_regs: list[QuantumRegister], anc_reg: QuantumRegister, counter: GateCounter = None) -> QuantumCircuit:
+def _build_oracle_qiskit(U_regs: list[QuantumRegister], anc_reg: QuantumRegister, counter: GateCounter | None = None) -> QuantumCircuit:
     """Build the oracle subcircuit.
 
     Flips all U register qubits except index 0, performs a big MCX onto ancilla,
@@ -174,7 +174,7 @@ def _build_oracle_qiskit(U_regs: list[QuantumRegister], anc_reg: QuantumRegister
     return oracle
 
 
-def _build_diffuser_qiskit(S_reg: QuantumRegister, counter: GateCounter = None) -> QuantumCircuit:
+def _build_diffuser_qiskit(S_reg: QuantumRegister, counter: GateCounter | None = None) -> QuantumCircuit:
     """Standard Grover diffuser on subset register S.
     
     Args:

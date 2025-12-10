@@ -7,10 +7,11 @@ Cancellation (PEC) techniques.
 Architecture: How Mitiq Integrates with Backends
 ================================================
 
-**Key Principle: Mitiq only speaks Qiskit/Cirq, BUT your backends use pytket.**
+**Key Principle: Mitiq ONLY speaks Qiskit/Cirq. Your backends may use Qiskit OR pytket.**
 
-The executor is the translation layer that makes this work. Here's the
-COMPLETE flow including circuit format conversions:
+The executor is the translation layer that bridges this gap. When Mitiq provides a Qiskit
+circuit, the executor detects your backend's SDK type and converts the circuit format only
+if needed (Qiskit → pytket for pytket backends). Here's the COMPLETE flow:
 
 .. code-block:: text
 
@@ -39,35 +40,49 @@ COMPLETE flow including circuit format conversions:
                         ▼
     ┌─────────────────────────────────────────────────────────┐
     │     Backend (via BackendManager)                        │
-    │  • IBM Quantum  → qiskit backend wrapper                │
-    │  • Quantinuum   → qnexus backend wrapper                │
-    │  • Aer Simulator → pytket-qiskit AerBackend             │
-    │  Note: AWS Braket uses native Braket SDK (not pytket)   │
-    │        and requires different circuit conversion        │
+    │  • IBM Quantum (Qiskit backend)  → Uses Qiskit directly │
+    │  • Aer Simulator (Qiskit backend) → Uses Qiskit directly│
+    │  • Quantinuum (pytket backend)    → Converts to pytket  │
+    │  Note: AWS Braket NOT supported (incompatible SDK)      │
     └─────────────────────────────────────────────────────────┘
 
 Mitiq thinks it's always working with Qiskit circuits.
 1. Receives Qiskit circuit from Mitiq (after noise scaling)
-2. Converts to pytket using qiskit_to_tk()
-4. Returns success probability to Mitiq
+2. Detects backend SDK type (native Qiskit vs pytket)
+3. Converts circuit format only if needed (Qiskit → pytket for pytket backends)
+4. Executes via backend.run() (Qiskit) or backend.process_circuit() (pytket)
+5. Returns success probability to Mitiq
 
 This is why the SAME executor pattern works with all backends despite Mitiq
 only supporting Qiskit/Cirq natively.
 
-Multi-Backend Support (Provider-Agnostic)
+Multi-Backend Support (Qiskit and PyTKET)
 ==========================================
 
-The executor pattern works with ANY backend because it handles circuit format
-conversion automatically:
+The executor pattern works with Qiskit and pytket backends because it detects
+the backend SDK type and converts circuit format only when necessary:
 
 .. code-block:: python
 
-    # YOUR CODE: All backends use pytket interface
-    handle = backend.process_circuit(pytket_circuit, n_shots=shots)
-    result = backend.get_result(handle)
-    counts = result.get_counts()
+    # Backend detection
+    is_qiskit_backend = 'qiskit_ibm_runtime' in backend.__module__ or \
+                       (hasattr(backend, 'target') or hasattr(backend, 'configuration'))
+    is_pytket_backend = hasattr(backend, 'process_circuit') and hasattr(backend, 'get_result')
+    
+    # Execute based on backend SDK type:
+    if is_qiskit_backend:  # Qiskit backends (IBM, Aer)
+        # Use Qiskit circuit directly - no conversion needed
+        job = backend.run(qiskit_circuit, shots=shots)
+        result = job.result()
+        counts = result.get_counts()
+    else:  # PyTKET backends (Quantinuum)
+        # Convert Qiskit → pytket for backend compatibility
+        handle = backend.process_circuit(pytket_circuit, n_shots=shots)
+        result = backend.get_result(handle)
+        counts = result.get_counts()
 
-But Mitiq only works with Qiskit/Cirq. So we do conversions:
+**Key Point:** Mitiq ONLY works with Qiskit/Cirq circuits. We convert to pytket
+ONLY when the backend requires it (e.g., Quantinuum):
 
 .. code-block:: python
 
@@ -88,7 +103,7 @@ But Mitiq only works with Qiskit/Cirq. So we do conversions:
         result = backend.get_result(handle)
         # ... compute and return success probability
 
-This means you can use the SAME mitigation code with different providers:
+This means you can use the SAME mitigation code with different backend types:
 
 .. code-block:: python
 
@@ -99,37 +114,54 @@ This means you can use the SAME mitigation code with different providers:
 
     manager = BackendManager()
     
-    # Your circuit is pytket format
+    # Your circuit (can be pytket or qiskit format)
     pytket_circuit = solver.build_circuit(puzzle)
     
-    # Convert to Qiskit for Mitiq (one-time conversion)
+    # MUST convert to Qiskit for Mitiq (Mitiq only accepts Qiskit/Cirq)
     qiskit_circuit = tk_to_qiskit(pytket_circuit)
     
-    # IBM Quantum (uses pytket via pytket-qiskit wrapper)
+    # IBM Quantum - Returns Qiskit backend
     ibm_backend = manager.get("ibm_brisbane")
     ibm_executor = create_zne_executor(ibm_backend, solver, shots=4096)
     ibm_result = zne.execute_with_zne(qiskit_circuit, ibm_executor)
+    # → Executor uses Qiskit circuit directly (backend is Qiskit)
     
-    # Quantinuum (native pytket backend)
+    # Quantinuum - Returns pytket backend
     quant_backend = manager.get("H1-1")
     quant_executor = create_zne_executor(quant_backend, solver, shots=4096)
     quant_result = zne.execute_with_zne(qiskit_circuit, quant_executor)
+    # → Executor converts Qiskit → pytket (backend requires pytket)
     
-    # Both work because executor converts: Qiskit → pytket internally!
-    # (AWS Braket would need different conversion: Qiskit → Braket)
+    # Aer simulator - Returns Qiskit backend
+    aer_backend = manager.get("aer")
+    aer_executor = create_zne_executor(aer_backend, solver, shots=4096)
+    aer_result = zne.execute_with_zne(qiskit_circuit, aer_executor)
+    # → Executor uses Qiskit circuit directly (backend is Qiskit)
 
-**You give Mitiq a Qiskit circuit. The executor converts it back to pytket
-internally. This works with IBM and Quantinuum backends (both use pytket)!**
+**Critical Flow:** Mitiq provides a Qiskit circuit to the executor. The executor
+detects the backend's SDK type and converts ONLY if the backend requires pytket.
 
-Circuit Format Journey:
-- Start: pytket (your code)
-- For Mitiq: pytket → Qiskit (tk_to_qiskit)
-- Inside executor: Qiskit → pytket (qiskit_to_tk)  ← KEY TRANSLATION
-- Backend execution: pytket (IBM via pytket-qiskit, Quantinuum native)
-- Result: Backend-agnostic error mitigation!
+Circuit Format Journey (Backend-Dependent):
 
-Note: AWS Braket backends use native Braket SDK and would require
-additional circuit conversion (Qiskit → Braket or pytket → Braket).
+**For Qiskit Backends (IBM Quantum, Aer):**
+- Your code: Can use pytket or qiskit
+- For Mitiq: Must be Qiskit (tk_to_qiskit if needed)
+- Mitiq: Scales noise, calls executor with Qiskit circuit
+- Executor: Uses Qiskit circuit directly (NO CONVERSION)
+- Backend: backend.run(qiskit_circuit, shots=shots)
+- Result: Qiskit-native execution with mitigation ✓
+
+**For PyTKET Backends (Quantinuum):**
+- Your code: Can use pytket or qiskit
+- For Mitiq: Must be Qiskit (tk_to_qiskit if needed)
+- Mitiq: Scales noise, calls executor with Qiskit circuit
+- Executor: Converts Qiskit → pytket (qiskit_to_tk)
+- Backend: backend.process_circuit(pytket_circuit, n_shots=shots)
+- Result: PyTKET execution with mitigation ✓
+
+**AWS Braket:** NOT SUPPORTED. Braket SDK is incompatible with current
+mitigation architecture (would require Qiskit/Cirq → Braket conversion
+which is not implemented).
 
 Integration with Your Sudoku Framework
 =======================================
@@ -170,7 +202,7 @@ When you call ``solver.run(backend, use_zne=True)``, the flow is:
 4. **Executor** uses your existing ``backend.process_circuit()`` pattern
 5. **Executor** computes success probability and returns to Mitiq
 6. **Mitiq** extrapolates to zero-noise estimate
-7. **QuantumSolver** attaches result as ``._mitigated_success_prob``
+7. **QuantumSolver** attaches result as ``.mitigated_success_prob``
 
 Example Usage
 =============
@@ -201,7 +233,7 @@ Basic usage with ZNE:
     
     # Access mitigated success probability
     raw_counts = result.get_counts()
-    mitigated_prob = result._mitigated_success_prob
+    mitigated_prob = result.mitigated_success_prob
     
     print(f"Mitigated success probability: {mitigated_prob:.2%}")
 
@@ -599,8 +631,8 @@ def apply_zne(
     Args:
         circuit: Quantum circuit to execute with mitigation. Should be the
             transpiled/compiled circuit ready for backend execution (pytket.Circuit).
-        backend: Quantum backend instance from BackendManager. Works with
-            pytket-compatible providers: IBM Quantum, Quantinuum, Aer simulator.
+        backend: Quantum backend instance from BackendManager.
+            Works with native Qiskit backends (IBM Quantum, Aer) and pytket backends (Quantinuum).
         solver: Quantum solver with _is_valid_solution method for validating
             measurement outcomes against exact cover constraints.
         shots (int): Number of shots per execution. ZNE will execute the circuit
@@ -710,8 +742,9 @@ def apply_pec(
     Args:
         circuit: Quantum circuit to execute with mitigation. Should be the
             transpiled/compiled circuit ready for backend execution (pytket.Circuit).
-        backend: Quantum backend instance from BackendManager. Works with
-            pytket-compatible providers: IBM Quantum, Quantinuum.
+        backend: Quantum backend instance from BackendManager.
+            Supported: Qiskit backends (IBM, Aer) or pytket backends (Quantinuum).
+            NOT supported: AWS Braket.
         solver: Quantum solver with _is_valid_solution method for validating
             measurement outcomes.
         representations: OperationRepresentation list mapping ideal gates to

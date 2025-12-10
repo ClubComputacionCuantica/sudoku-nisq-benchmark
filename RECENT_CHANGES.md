@@ -57,3 +57,35 @@
 - Improved executor implementations for error mitigation
 - Better separation of concerns between circuit implementations (Qiskit, Braket, Pytket)
 
+## December 2025 - CI, Docs, Providers, and Examples Refresh
+
+### CI & Tooling
+- Updated CI workflow at `.github/workflows/ci.yml` to run lint (ruff), type-check (mypy), and tests.
+- `poetry.lock` corrected to remove duplicate dependency blocks; `poetry install` now succeeds.
+
+### Documentation Updates
+- Refreshed guides: getting-started, quickstart, providers, error mitigation, Aer features.
+- Added internal architecture and metrics references under `docs/internal/`.
+- New `docs/guide/metrics_reference.md` added.
+- Updated Sphinx config `docs/conf.py`.
+
+### Examples & Notebooks
+- Updated examples for exact cover benchmarking and demos.
+- Added error mitigation comparison example.
+- Tweaked notebooks including `2x2_aer.ipynb`; added `error_mitigation_demo.md`.
+
+### Providers & Backends
+- Iterated on providers `aer.py`, `aws.py`, `quantinuum.py` and `providers/__init__.py`.
+- Backend utilities refined in `src/sudoku_nisq/backends.py`.
+
+### Circuits & Solvers
+- Adjustments across circuit implementations for exact cover (Braket, Pytket, Qiskit).
+- Solver and transpilation improvements in `solvers/exact_cover_solver.py`.
+
+### Core Modules & Utilities
+- Exact cover problem and QSolve/QSudoku refinements.
+- Memory tracking and mitigation executors improved.
+
+### Tests
+- Updated and expanded tests: Aer features, IBM native, metadata manager, mitigation, SDK selection, transpilation, and QSudoku.
+

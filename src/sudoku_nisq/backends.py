@@ -1,7 +1,8 @@
 """Unified manager for quantum computing backends across multiple providers."""
 
 from typing import Any, Dict, List, Optional
-from .providers import QuantumProvider, IBMProvider, QuantinuumProvider, AerProvider
+from .providers import QuantumProvider, AerProvider
+from .providers import IBMProvider, QuantinuumProvider, AWSProvider  # May be None if not installed
 
 
 class BackendManager:
@@ -38,9 +39,16 @@ class BackendManager:
         self._backend_to_provider: Dict[str, str] = {}
         
         # Register built-in providers
-        self.register_provider(IBMProvider())
-        self.register_provider(QuantinuumProvider())
+        # AerProvider is always available (uses qiskit-aer from dependencies)
         self.register_provider(AerProvider())
+        
+        # Register optional providers if available
+        if IBMProvider is not None:
+            self.register_provider(IBMProvider())
+        if QuantinuumProvider is not None:
+            self.register_provider(QuantinuumProvider())
+        if AWSProvider is not None:
+            self.register_provider(AWSProvider())
     
     def register_provider(self, provider: QuantumProvider) -> None:
         """Register a new quantum provider.

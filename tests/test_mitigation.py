@@ -13,7 +13,8 @@ class TestExpectationWrapper:
     def test_compute_success_expectation_basic(self):
         """Test basic success probability calculation."""
         counts = {'00': 100, '01': 50, '10': 30, '11': 20}
-        validator = lambda b: b in ['01', '10']  # Only these are valid
+        def validator(b):
+            return b in ['01', '10']  # Only these are valid
         
         result = compute_success_expectation(counts, validator)
         expected = (50 + 30) / 200  # 0.4
@@ -22,7 +23,8 @@ class TestExpectationWrapper:
     def test_compute_success_expectation_all_valid(self):
         """Test when all outcomes are valid."""
         counts = {'00': 50, '01': 50}
-        validator = lambda b: True  # All valid
+        def validator(b):
+            return True  # All valid
         
         result = compute_success_expectation(counts, validator)
         assert abs(result - 1.0) < 1e-9
@@ -30,7 +32,8 @@ class TestExpectationWrapper:
     def test_compute_success_expectation_none_valid(self):
         """Test when no outcomes are valid."""
         counts = {'00': 50, '01': 50}
-        validator = lambda b: False  # None valid
+        def validator(b):
+            return False  # None valid
         
         result = compute_success_expectation(counts, validator)
         assert abs(result - 0.0) < 1e-9
@@ -38,7 +41,8 @@ class TestExpectationWrapper:
     def test_compute_success_expectation_empty_counts(self):
         """Test with empty counts dictionary."""
         counts = {}
-        validator = lambda b: True
+        def validator(b):
+            return True
         
         result = compute_success_expectation(counts, validator)
         assert result == 0.0

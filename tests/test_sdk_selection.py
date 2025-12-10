@@ -39,7 +39,7 @@ class TestSDKSelection:
         qiskit_circ = puzzle.build_circuit(sdk="qiskit")
         
         # They should be different types
-        assert type(pytket_circ) != type(qiskit_circ)
+        assert type(pytket_circ) is not type(qiskit_circ)
         
         # PyTKET should have specific attributes
         assert hasattr(pytket_circ, 'n_qubits')
@@ -68,7 +68,7 @@ class TestSDKSelection:
         circuit2 = puzzle.build_circuit(sdk="qiskit")
         
         # Should be different types
-        assert type(circuit1) != type(circuit2)
+        assert type(circuit1) is not type(circuit2)
         assert "pytket" in type(circuit1).__module__
         assert "qiskit" in type(circuit2).__module__
     

@@ -239,7 +239,7 @@ class ExactCoverProblem:
             ordered_universe = sorted(self.universe, key=str)
         
         n = len(ordered_universe)
-        elem_to_idx = {elem: i for i, elem in enumerate(ordered_universe)}
+        {elem: i for i, elem in enumerate(ordered_universe)}
         
         # Step 2: Convert each subset to a column bitvector
         columns: List[Tuple[str, Tuple[int, ...]]] = []  # (bitstring, bitvector)
@@ -267,6 +267,7 @@ class ExactCoverProblem:
         
         # Convert to matrix format (row-major: list of rows)
         m = len(unique_columns)
+        canonical_matrix: list[list[int]]
         if m == 0:
             canonical_matrix = [[] for _ in range(n)]
         else:
@@ -532,7 +533,6 @@ class ExactCoverProblem:
                 return 1
 
             # Choose an element with the smallest branching factor
-            best_elem = None
             best_candidates: Optional[List[str]] = None
 
             for e in rem:
@@ -549,7 +549,6 @@ class ExactCoverProblem:
                     return 0
 
                 if best_candidates is None or len(candidates) < len(best_candidates):
-                    best_elem = e
                     best_candidates = candidates
                     if len(best_candidates) == 1:
                         break  # can't do better than 1

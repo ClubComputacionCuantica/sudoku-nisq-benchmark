@@ -34,12 +34,34 @@ solver = puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
 ```
 
 ## 3. Resource Estimation (Optional)
+Check qubit and gate requirements before building the circuit:
+
 ```python
 resources = solver.resource_estimation()
-print(resources)
+print(f"Qubits needed: {resources['n_qubits']}")
+print(f"Gate count: {resources['n_gates']}")
+# Use this to decide if local simulation is feasible
 ```
 
-## 4. Attach a Backend (Simple IBM Flow)
+```{note}
+For local simulation: statevector method works well up to ~25 qubits. Consider using matrix product state (MPS) or other methods for larger circuits.
+```
+
+## 4. Build Circuit
+Build the quantum circuit with your preferred SDK (all three are supported):
+
+```python
+# Qiskit (for Aer simulation or IBM backends)
+circuit = puzzle.build_circuit(sdk="qiskit")
+
+# PyTKET (for Quantinuum or flexible transpilation)
+circuit = puzzle.build_circuit(sdk="pytket")
+
+# Braket (for AWS backends)
+circuit = puzzle.build_circuit(sdk="braket")
+```
+
+## 5. Attach a Backend (Simple IBM Flow)
 ```python
 # Replace with your credentials and device
 # alias = puzzle.init_ibm(api_token="<token>", instance="<crn>", device="ibm_brisbane")
@@ -53,16 +75,16 @@ print(resources)
 See {doc}`providers` for backend setup details and configuration examples.
 ```
 
-## 5. Run the Solver
+## 6. Run the Solver
 ```python
-# Local simulator (no credentials)
+# Local simulator with Aer (Qiskit-based, no credentials needed)
 result = puzzle.run_aer(shots=512)
 
 # Or on hardware/simulator via provider (requires init_ibm above)
 # result = puzzle.run(alias, opt_level=1, shots=512)
 ```
 
-## 6. Visualize and Summarize
+## 7. Visualize and Summarize
 ```python
 puzzle.counts_plot(result, backend_alias="Local", shots=512)
 summary = puzzle.report_resources()

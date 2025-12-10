@@ -1,6 +1,6 @@
+# mypy: ignore-errors
 from typing import Any, Dict, List, Optional
 import qnexus as qnx
-from pytket.backends import Backend  # type: ignore
 from .base import QuantumProvider
 
 class QuantinuumProvider(QuantumProvider):
@@ -214,7 +214,7 @@ class QuantinuumProvider(QuantumProvider):
         compiled_outputs = qnx.jobs.results(compile_job)
         # take first compiled circuit as example
         compiled_ref = compiled_outputs[0].get_output()
-        compiled_circuit = compiled_ref.download_circuit()
+        compiled_ref.download_circuit()
 
         # Submit execute job
         execute_job = qnx.jobs.execute(

@@ -1,7 +1,7 @@
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from typing import List
 
 from sudoku_nisq.q_sudoku import QSudoku

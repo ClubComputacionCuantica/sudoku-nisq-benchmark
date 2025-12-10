@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import json
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -32,8 +33,8 @@ class QuantumSolver(ABC):
 
     def __init__(
         self, 
-        puzzle: SudokuPuzzle = None,
-        metadata_manager: MetadataManager = None,
+        puzzle: SudokuPuzzle | None = None,
+        metadata_manager: MetadataManager | None = None,
         encoding: str | None = None, 
         store_transpiled: bool = True,
     ):
@@ -768,7 +769,7 @@ class QuantumSolver(ABC):
         Returns:
             Any: Result object from backend execution containing measurement
                 outcomes and job metadata. If mitigation is enabled, result
-                contains additional `_mitigated_success_prob` attribute.
+                contains additional `mitigated_success_prob` attribute.
                 
         Raises:
             TypeError: If the compiled circuit is not in the expected format.
@@ -855,7 +856,7 @@ class QuantumSolver(ABC):
                 
                 # Attach mitigated value as metadata
                 if hasattr(result, '__dict__'):
-                    result._mitigated_success_prob = mitigated_expectation
+                    result.mitigated_success_prob = mitigated_expectation
                 return result
             
             if use_pec:
@@ -879,7 +880,7 @@ class QuantumSolver(ABC):
                 
                 # Attach mitigated value
                 if hasattr(result, '__dict__'):
-                    result._mitigated_success_prob = mitigated_expectation
+                    result.mitigated_success_prob = mitigated_expectation
                 return result
         
         # Standard execution (no mitigation)
@@ -1322,7 +1323,6 @@ class QuantumSolver(ABC):
             path: File path for saving
         """
         from qiskit import qpy
-        import io
         
         path.parent.mkdir(parents=True, exist_ok=True)
         

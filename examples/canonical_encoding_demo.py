@@ -32,7 +32,7 @@ def example_1_basic_encoding():
     
     print("\nOriginal Problem:")
     print(f"  Universe: {problem.universe}")
-    print(f"  Subsets:")
+    print("  Subsets:")
     for name, subset in problem.subsets.items():
         print(f"    {name}: {subset}")
     
@@ -42,14 +42,14 @@ def example_1_basic_encoding():
     print("\nCanonical Representation:")
     print(f"  Ordered universe: {ordered_universe}")
     print(f"  Canonical matrix ({len(canonical_matrix)}×{len(canonical_matrix[0])}):")
-    print(f"    (Duplicates removed, columns sorted lexicographically)")
+    print("    (Duplicates removed, columns sorted lexicographically)")
     for i, row in enumerate(canonical_matrix):
         print(f"    Row {i} ({ordered_universe[i]}): {row}")
     
     # Binary encoding
     encoding = problem.to_canonical_encoding()
     
-    print(f"\nBinary Encoding:")
+    print("\nBinary Encoding:")
     print(f"  Length: {len(encoding)} bits")
     print(f"  Encoding: {encoding}")
     
@@ -73,7 +73,7 @@ def example_1_basic_encoding():
     m_decoded, rest = decode_unary(rest)
     bits = rest
     
-    print(f"\nEncoding Structure:")
+    print("\nEncoding Structure:")
     print(f"  un({n}) = {'1'*n}0 = {encoding[:n+1]}")
     print(f"  un({m}) = {'1'*m}0 = {encoding[n+1:n+1+m+1]}")
     print(f"  bits = {bits} ({len(bits)} bits = {n}×{m})")
@@ -82,7 +82,7 @@ def example_1_basic_encoding():
     # Global index
     index = problem.canonical_order_index()
     print(f"\nGlobal Shortlex Index: {index}")
-    print(f"  (Position in universal ordering of all exact cover instances)")
+    print("  (Position in universal ordering of all exact cover instances)")
 
 
 def example_2_isomorphism():
@@ -213,12 +213,12 @@ def example_4_sudoku_encodings():
         enc_pattern = encoder.to_canonical_encoding('pattern')
         
         print("\nExact Cover Encodings:")
-        print(f"  Simple encoding:")
+        print("  Simple encoding:")
         print(f"    Length: {len(enc_simple)} bits")
         print(f"    First 60 bits: {enc_simple[:60]}...")
         print(f"    Shortlex index: ~2^{len(enc_simple)}")
         
-        print(f"\n  Pattern encoding:")
+        print("\n  Pattern encoding:")
         print(f"    Length: {len(enc_pattern)} bits")
         print(f"    First 60 bits: {enc_pattern[:60]}...")
         print(f"    Shortlex index: ~2^{len(enc_pattern)}")
@@ -226,7 +226,7 @@ def example_4_sudoku_encodings():
         print("\nComparison:")
         print(f"  Encoding length ratio: {len(enc_simple)}/{len(enc_pattern)} = {len(enc_simple)/len(enc_pattern):.2f}x")
         print(f"  Encodings are different: {enc_simple != enc_pattern}")
-        print(f"    → Simple and pattern represent different exact cover instances")
+        print("    → Simple and pattern represent different exact cover instances")
         
         # Get universe sizes
         n_simple = len(encoder.universe2x2)
@@ -234,7 +234,7 @@ def example_4_sudoku_encodings():
         m_simple = len(encoder.simple_subsets)
         m_pattern = len(encoder.pattern_subsets)
         
-        print(f"\n  Problem sizes:")
+        print("\n  Problem sizes:")
         print(f"    Simple: {n_simple} constraints × {m_simple} subsets")
         print(f"    Pattern: {n_pattern} constraints × {m_pattern} subsets")
         
@@ -258,20 +258,20 @@ def example_5_index_computation():
     
     # Manual computation
     length = len(encoding)
-    print(f"\nIndex Computation:")
-    print(f"  1. Count all shorter strings:")
+    print("\nIndex Computation:")
+    print("  1. Count all shorter strings:")
     print(f"     Σ(i=0 to {length-1}) 2^i = 2^{length} - 1 = {(1 << length) - 1}")
     
-    print(f"\n  2. Interpret encoding as binary number:")
+    print("\n  2. Interpret encoding as binary number:")
     print(f"     int('{encoding}', 2) = {int(encoding, 2)}")
     
-    print(f"\n  3. Add offset:")
+    print("\n  3. Add offset:")
     index = (1 << length) - 1 + int(encoding, 2)
     print(f"     Index = {(1 << length) - 1} + {int(encoding, 2)} = {index}")
     
     # Verify
     computed_index = problem.canonical_order_index()
-    print(f"\n  4. Verify with method:")
+    print("\n  4. Verify with method:")
     print(f"     problem.canonical_order_index() = {computed_index}")
     print(f"     Match: {index == computed_index} ✓")
     

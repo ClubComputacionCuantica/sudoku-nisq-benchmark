@@ -141,6 +141,10 @@ result = puzzle.run_aer(
 
 **Best for**: Circuits up to ~25 qubits, ideal simulation, fast execution.
 
+```{note}
+Statevector simulation memory grows as 2^n. Check your puzzle's qubit requirement with `resource_estimation()` before running.
+```
+
 ### Density Matrix Simulation
 
 Required for accurate noisy simulation. Supports mixed states and decoherence.
@@ -154,6 +158,10 @@ result = puzzle.run_aer(
 ```
 
 **Best for**: Noisy simulation, circuits up to ~15 qubits (scales as 2^(2n)).
+
+```{note}
+Density matrix requires significantly more memory than statevector. Use for noisy simulations only.
+```
 
 ### Stabilizer Simulation
 

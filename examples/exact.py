@@ -19,7 +19,7 @@ def main():
     qec = QExactCover(problem)
 
     # 4) Build the circuit (SDK auto-selected; Aer uses Qiskit natively)
-    circuit = qec.build_circuit()  # or qec.build_circuit(sdk="qiskit")
+    qec.build_circuit()  # or qec.build_circuit(sdk="qiskit")
 
     # 5) Run on Aer simulator
     result = qec.run_aer(shots=512)

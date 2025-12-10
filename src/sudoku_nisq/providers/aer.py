@@ -101,7 +101,7 @@ class AerProvider(QuantumProvider):
         self._configured = True
         return self.list_available_devices()
     
-    def list_available_devices(self) -> List[str]:
+    def list_available_devices(self, **kwargs) -> List[str]:
         """
         List available Aer simulation methods.
         

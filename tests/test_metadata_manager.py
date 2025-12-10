@@ -12,10 +12,7 @@ Tests cover:
 """
 
 import json
-import tempfile
 import pytest
-from pathlib import Path
-from unittest.mock import patch, mock_open
 
 from sudoku_nisq.metadata_manager import MetadataManager
 

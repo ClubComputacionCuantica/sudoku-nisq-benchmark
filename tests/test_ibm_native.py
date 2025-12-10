@@ -9,7 +9,7 @@ Tests the full stack of IBM backend usage without PyTKET wrappers:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from qiskit import QuantumCircuit
 from qiskit.providers import BackendV2
 

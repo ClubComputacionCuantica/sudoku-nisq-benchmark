@@ -12,7 +12,12 @@ def main():
     # Create a tiny example problem
     qec = QExactCover.create_small_example()
 
-    # Build circuit (Qiskit)
+    # Check resource requirements
+    resources = qec.report_resources()
+    print(f"Estimated qubits: {resources['estimated']['n_qubits']}")
+    print(f"Estimated gates: {resources['estimated']['n_gates']}")
+
+    # Build circuit (Qiskit for Aer simulation)
     circuit = qec.build_circuit(sdk="qiskit")
     print(f"Circuit qubits: {circuit.num_qubits}, depth: {circuit.depth()}")
 

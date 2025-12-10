@@ -23,7 +23,7 @@ def main():
     
     # Build circuit (memory tracking happens if enabled)
     print("\nBuilding circuit with memory tracking enabled...")
-    circuit = puzzle.build_circuit()
+    puzzle.build_circuit()
     
     # Get memory usage statistics
     memory_usage = puzzle._solver.get_memory_usage()

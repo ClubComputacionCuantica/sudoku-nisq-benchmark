@@ -2,19 +2,29 @@
 
 This framework uses a provider pattern to abstract quantum backend interactions. Each provider encapsulates authentication, device discovery, registration, and (where applicable) job submission.
 
-## Architecture
+## Optional Dependencies
 
-Providers implement a common interface and are orchestrated by `BackendManager`:
+The framework includes several quantum providers, but only the **Aer provider** (local simulator) is available by default. To enable additional providers, install their dependencies:
 
+```bash
+# IBM Quantum (qiskit-ibm-runtime)
+pip install qiskit-ibm-runtime
+
+# Quantinuum via Nexus (qnexus)
+pip install qnexus
+
+# AWS Braket (amazon-braket-sdk, boto3)
+pip install amazon-braket-sdk boto3
 ```
-QuantumProvider (Abstract Base Class)
-├── IBMProvider (IBM Quantum) – Qiskit
-├── QuantinuumProvider (Quantinuum Nexus) – PyTKET
-├── AerProvider (Qiskit Aer simulator) – Qiskit
-└── AWSProvider (Amazon Braket) – Braket
-```
 
-`BackendManager` maintains a unified registry of backend aliases across providers.
+Providers are automatically registered when their dependencies are available. You can check which providers are active:
+
+```python
+from sudoku_nisq.backends import BackendManager
+
+manager = BackendManager()
+print(manager.list_providers())  # ['aer', 'ibm', 'quantinuum', 'aws'] (if all installed)
+```
 
 ## Using Providers
 
@@ -86,6 +96,20 @@ All providers implement `QuantumProvider`:
 
 ## Provider Notes (High Level)
 
+### Aer (AerProvider)
+
+- SDK: Qiskit (local simulator).
+- Auth: none; always available.
+- Devices: simulation methods (e.g., `statevector`, `density_matrix`).
+- Options: noise models, GPU, precision, and advanced backend settings.
+
+### AWS Braket (AWSProvider)
+
+- SDK: Amazon Braket.
+- Status: Template implementation (requires `amazon-braket-sdk` and `boto3`).
+- Installation: `pip install amazon-braket-sdk boto3`
+- Note: This provider is optional and only available when AWS dependencies are installed.
+
 ### IBM Quantum (IBMProvider)
 
 - SDK: Qiskit (native runtime backends).
@@ -99,21 +123,16 @@ All providers implement `QuantumProvider`:
 - Devices: discovered via Nexus; add stores a Nexus config and optionally a PyTKET backend.
 - Jobs: compile → execute model via Nexus (advanced usage; not required for simple listing/registration).
 
-### Aer (AerProvider)
+## Architecture
 
-- SDK: Qiskit (local simulator).
-- Auth: none; always available.
-- Devices: simulation methods (e.g., `statevector`, `density_matrix`).
-- Options: noise models, GPU, precision, and advanced backend settings.
+Providers implement a common interface and are orchestrated by `BackendManager`:
 
-### AWS Braket (AWSProvider)
+```
+QuantumProvider (Abstract Base Class)
+├── IBMProvider (IBM Quantum) – Qiskit
+├── QuantinuumProvider (Quantinuum Nexus) – PyTKET
+├── AerProvider (Qiskit Aer simulator) – Qiskit
+└── AWSProvider (Amazon Braket) – Braket
+```
 
-- SDK: Amazon Braket.
-- Status: Not fully implemented.
-
-## Best Practices
-
-- Use clear aliases per provider; keep them unique.
-- Match circuit types to `sdk_type` (Qiskit vs PyTKET).
-- Prefer local simulators (Aer) during development; expect queues for hardware.
-- Re-authenticate only when needed (`overwrite=True` if supported).
+`BackendManager` maintains a unified registry of backend aliases across providers.

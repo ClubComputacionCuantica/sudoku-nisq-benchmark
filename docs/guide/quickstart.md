@@ -15,12 +15,16 @@ puzzle = QSudoku.generate(size=2, num_missing_cells=2, subgrid_size=1)
 # 2) Choose a solver
 puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
 
-# 3) Build circuit and run locally (Aer)
-circuit = puzzle.build_circuit()
+# 3) Check resource requirements before building
+resources = puzzle._solver.resource_estimation()
+print(f"Requires {resources['n_qubits']} qubits, {resources['n_gates']} gates")
+
+# 4) Build circuit and run locally (Aer backend with qiskit)
+circuit = puzzle.build_circuit(sdk="qiskit")
 result = puzzle.run_aer(shots=256)
 print("counts:", result.get_counts())
 
-# 4) Plot counts (optional)
+# 5) Plot counts (optional)
 puzzle.counts_plot(result, backend_alias="Local", shots=256)
 ```
 
@@ -36,7 +40,7 @@ print("Top assignments:", top['assignments'][:5])
 if top['board'] is not None:
     print("Filled board preview:", top['board'][:2])
 
-# 5) Resource summary (from metadata)
+# 6) Resource summary (from metadata)
 summary = puzzle.report_resources()
 print("summary keys:", summary.keys())
 ```
@@ -56,9 +60,26 @@ board_4x4 = [
 puzzle = QSudoku.from_board(board_4x4)
 puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
 
-circuit = puzzle.build_circuit()
+# Check resources (4x4 puzzles need more qubits)
+resources = puzzle._solver.resource_estimation()
+print(f"Qubits: {resources['n_qubits']}, Gates: {resources['n_gates']}")
+
+circuit = puzzle.build_circuit(sdk="qiskit")
 result = puzzle.run_aer(shots=512)
 print("counts:", result.get_counts())
+```
+
+## Multiple SDK Support
+All three SDKs are supported for circuit building:
+```python
+# Qiskit (for Aer or IBM backends)
+circuit = puzzle.build_circuit(sdk="qiskit")
+
+# PyTKET (for Quantinuum backends)
+circuit = puzzle.build_circuit(sdk="pytket")
+
+# Braket (for AWS backends)
+circuit = puzzle.build_circuit(sdk="braket")
 ```
 
 ## Running on a hardware backend (outline)

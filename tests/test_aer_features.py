@@ -12,7 +12,6 @@ Tests cover:
 """
 
 import pytest
-from pathlib import Path
 from sudoku_nisq import QSudoku
 from sudoku_nisq.backends import BackendManager
 from sudoku_nisq.providers import AerProvider
@@ -183,10 +182,11 @@ class TestQSudokuAerMethods:
         
         assert alias == "my_aer"
     
+    @pytest.mark.heavy
     def test_run_aer_enhanced(self):
         """Test enhanced run_aer with parameters."""
         result = self.puzzle.run_aer(
-            shots=512,
+            shots=64,
             method="matrix_product_state",  # Use MPS to avoid memory issues
             optimization_level=0
         )
@@ -196,8 +196,9 @@ class TestQSudokuAerMethods:
         assert hasattr(result, 'get_counts')
         counts = result.get_counts()
         assert isinstance(counts, dict)
-        assert sum(counts.values()) == 512
+        assert sum(counts.values()) == 64
     
+    @pytest.mark.heavy
     def test_run_aer_with_different_methods(self):
         """Test run_aer with different simulation methods."""
         # Use memory-efficient methods only
@@ -205,13 +206,14 @@ class TestQSudokuAerMethods:
         
         for method in methods:
             result = self.puzzle.run_aer(
-                shots=256,
+                shots=64,
                 method=method
             )
             assert result is not None
             counts = result.get_counts()
-            assert sum(counts.values()) == 256
+            assert sum(counts.values()) == 64
     
+    @pytest.mark.heavy
     def test_run_aer_with_noise_custom(self):
         """Test run_aer_with_noise with custom noise model."""
         pytest.importorskip("qiskit_aer")
@@ -223,14 +225,14 @@ class TestQSudokuAerMethods:
         )
         
         result = self.puzzle.run_aer_with_noise(
-            shots=512,
+            shots=128,
             noise_model=noise,
             method="density_matrix"
         )
         
         assert result is not None
         counts = result.get_counts()
-        assert sum(counts.values()) == 512
+        assert sum(counts.values()) == 128
     
     @pytest.mark.skip(reason="Requires fake provider updates for recent Qiskit versions")
     def test_run_aer_with_noise_from_device(self):
@@ -255,31 +257,35 @@ class TestAerSimulationMethods:
     def setup_method(self):
         """Create puzzle for each test."""
         BackendManager._singleton = None
+        # Use 4x4 puzzle (subgrid_size=2) with pattern encoding (3 missing cells)
         self.puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=3)
-        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
+    @pytest.mark.heavy
     def test_automatic_method(self):
         """Test automatic method selection."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="automatic"
         )
         assert result is not None
     
+    @pytest.mark.heavy
     def test_statevector_method(self):
         """Test matrix_product_state simulation (avoiding large statevector)."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="matrix_product_state"
         )
         assert result is not None
         counts = result.get_counts()
         assert len(counts) > 0
     
+    @pytest.mark.heavy
     def test_density_matrix_method(self):
         """Test density matrix simulation."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="density_matrix",
             optimization_level=0  # Simpler transpilation
         )
@@ -304,32 +310,35 @@ class TestAerPrecisionAndDevices:
     def setup_method(self):
         """Create puzzle for each test."""
         BackendManager._singleton = None
-        # Use 2x2 puzzle to avoid memory issues
-        self.puzzle = QSudoku.generate(subgrid_size=1, num_missing_cells=1)
-        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+        # Use 4x4 puzzle (subgrid_size=2) with pattern encoding (3 missing cells)
+        self.puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=3)
+        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
+    @pytest.mark.heavy
     def test_double_precision(self):
         """Test double precision (default)."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="matrix_product_state",
             precision="double"
         )
         assert result is not None
     
+    @pytest.mark.heavy
     def test_single_precision(self):
         """Test single precision."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="matrix_product_state",
             precision="single"
         )
         assert result is not None
     
+    @pytest.mark.heavy
     def test_cpu_device(self):
         """Test CPU device (default)."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             device="CPU"
         )
         assert result is not None
@@ -359,26 +368,28 @@ class TestAerBackwardCompatibility:
     def setup_method(self):
         """Create puzzle for each test."""
         BackendManager._singleton = None
-        # Use 2x2 puzzle to avoid memory issues
-        self.puzzle = QSudoku.generate(subgrid_size=1, num_missing_cells=1)
-        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+        # Use 4x4 puzzle (subgrid_size=2) with pattern encoding (3 missing cells)
+        self.puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=3)
+        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
+    @pytest.mark.heavy
     def test_old_run_aer_still_works(self):
         """Test that old run_aer(shots=N) calls still work."""
         # Old usage pattern
-        result = self.puzzle.run_aer(shots=512)
+        result = self.puzzle.run_aer(shots=128)
         
         assert result is not None
         counts = result.get_counts()
-        assert sum(counts.values()) == 512
+        assert sum(counts.values()) == 128
     
+    @pytest.mark.heavy
     def test_default_parameters(self):
         """Test run_aer with all defaults."""
         result = self.puzzle.run_aer()
         
         assert result is not None
         counts = result.get_counts()
-        assert sum(counts.values()) == 1024  # Default shots
+        assert sum(counts.values()) == 1024  # Default shots (unchanged in code)
 
 
 class TestAerWithTranspilation:
@@ -387,25 +398,27 @@ class TestAerWithTranspilation:
     def setup_method(self):
         """Create puzzle for each test."""
         BackendManager._singleton = None
-        # Use 2x2 puzzle to avoid memory issues
-        self.puzzle = QSudoku.generate(subgrid_size=1, num_missing_cells=1)
+        # Use 4x4 puzzle (subgrid_size=2) with pattern encoding (3 missing cells)
+        self.puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=3)
         self.puzzle.set_solver(
             ExactCoverQuantumSolver,
-            encoding="simple",
+            encoding="pattern",
             store_transpiled=True
         )
     
+    @pytest.mark.heavy
     def test_transpilation_levels(self):
         """Test different optimization levels."""
-        for opt_level in [0, 1, 2, 3]:
+        # Only test opt_level 0 and 2 to reduce resource usage
+        for opt_level in [0, 2]:
             result = self.puzzle.run_aer(
-                shots=128,
-                method="statevector",
+                shots=64,
+                method="matrix_product_state",
                 optimization_level=opt_level
             )
             assert result is not None
             counts = result.get_counts()
-            assert sum(counts.values()) == 128
+            assert sum(counts.values()) == 64
     
     def test_aer_backend_detection(self):
         """Test that Aer backend is properly detected as Qiskit SDK."""
@@ -425,10 +438,11 @@ class TestAerNoiseModels:
     def setup_method(self):
         """Create puzzle for each test."""
         BackendManager._singleton = None
-        # Use 2x2 puzzle to avoid memory issues
-        self.puzzle = QSudoku.generate(subgrid_size=1, num_missing_cells=1)
-        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+        # Use 4x4 puzzle (subgrid_size=2) with pattern encoding (3 missing cells)
+        self.puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=3)
+        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
+    @pytest.mark.heavy
     def test_depolarizing_noise(self):
         """Test depolarizing error noise model."""
         pytest.importorskip("qiskit_aer")
@@ -443,15 +457,16 @@ class TestAerNoiseModels:
         )
         
         result = self.puzzle.run_aer(
-            shots=512,
+            shots=128,
             method="density_matrix",
             noise_model=noise
         )
         
         assert result is not None
         counts = result.get_counts()
-        assert sum(counts.values()) == 512
+        assert sum(counts.values()) == 128
     
+    @pytest.mark.heavy
     def test_readout_error(self):
         """Test readout error noise model."""
         pytest.importorskip("qiskit_aer")
@@ -463,7 +478,7 @@ class TestAerNoiseModels:
         noise.add_all_qubit_readout_error(readout_error)
         
         result = self.puzzle.run_aer(
-            shots=512,
+            shots=128,
             method="matrix_product_state",  # Use MPS instead of statevector
             noise_model=noise
         )
@@ -477,31 +492,33 @@ class TestAerPerformanceOptions:
     def setup_method(self):
         """Create puzzle for each test."""
         BackendManager._singleton = None
-        # Use 2x2 puzzle to avoid memory issues
-        self.puzzle = QSudoku.generate(subgrid_size=1, num_missing_cells=1)
-        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+        # Use 4x4 puzzle (subgrid_size=2) with pattern encoding (3 missing cells)
+        self.puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=3)
+        self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
+    @pytest.mark.heavy
     def test_blocking_options(self):
         """Test qubit blocking options."""
         result = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="matrix_product_state",
             blocking_enable=True,
             blocking_qubits=5
         )
         assert result is not None
     
+    @pytest.mark.heavy
     def test_seed_simulator(self):
         """Test reproducible simulation with seed."""
         result1 = self.puzzle.run_aer(
-            shots=256,
+            shots=64,
             method="matrix_product_state",
             seed_simulator=42
         )
         
         result2 = self.puzzle.run_aer(
-            shots=256,
-            method="statevector",
+            shots=64,
+            method="matrix_product_state",
             seed_simulator=42
         )
         

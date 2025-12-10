@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import math
 from copy import deepcopy
 from pytket import Circuit, Qubit, OpType
@@ -57,7 +58,7 @@ def _compute_grover_iterations(solver) -> int:
     )
 
 
-def _add_multi_control_gate(circ: Circuit, op_type: OpType, qubits, max_controls=MAX_MULTI_CONTROLS, counter: GateCounter = None):
+def _add_multi_control_gate(circ: Circuit, op_type: OpType, qubits, max_controls=MAX_MULTI_CONTROLS, counter: GateCounter | None = None):
     """
     Add a multi-controlled gate (CnX, CnZ, etc.) with a sanity check on the
     number of control qubits.
@@ -202,7 +203,7 @@ def build_exact_cover_circuit(solver, decompose_cnz: bool = True):
         
     return main_circuit, counter.to_dict()
 
-def _build_counter_pytket(solver, count_circuit, s_qubits, u_qubits, counter: GateCounter = None):
+def _build_counter_pytket(solver, count_circuit, s_qubits, u_qubits, counter: GateCounter | None = None):
     """Build counting circuit using PyTKET.
     
     Args:
@@ -230,7 +231,7 @@ def _build_counter_pytket(solver, count_circuit, s_qubits, u_qubits, counter: Ga
     # Reverse the lists because of the construction in the previous step
     reversed_lists = []
     for element in all_lists:
-        reversed_element = element[::-1]
+        reversed_element: list = element[::-1]  # type: ignore[assignment]
         reversed_lists.append(reversed_element)
 
     # Add the MCX gates to the counting circuit
@@ -238,7 +239,7 @@ def _build_counter_pytket(solver, count_circuit, s_qubits, u_qubits, counter: Ga
         for q_list in element:
             _add_multi_control_gate(count_circuit, OpType.CnX, q_list, counter=counter)
 
-def _build_oracle_pytket(oracle, solver, u_qubits, anc, counter: GateCounter = None):
+def _build_oracle_pytket(oracle, solver, u_qubits, anc, counter: GateCounter | None = None):
     """Build oracle circuit using PyTKET.
     
     Args:
@@ -262,7 +263,7 @@ def _build_oracle_pytket(oracle, solver, u_qubits, anc, counter: GateCounter = N
     if counter is not None:
         counter.increment("X", x_count)
 
-def _build_diffuser_pytket(diffuser, s_qubits, counter: GateCounter = None, decompose_cnz: bool = True):
+def _build_diffuser_pytket(diffuser, s_qubits, counter: GateCounter | None = None, decompose_cnz: bool = True):
     """Build diffuser circuit using PyTKET.
     
     Args:

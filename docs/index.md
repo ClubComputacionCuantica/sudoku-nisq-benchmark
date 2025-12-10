@@ -7,7 +7,7 @@ Approachable Sudoku-based exact cover benchmarking for near-term quantum devices
 - Installation: {doc}`guide/installation`
 - Examples (runnable): see the `examples/` folder; walkthroughs in {doc}`guide/examples`
 - Features: {doc}`guide/features`
-- Metrics: {doc}`guide/metrics`
+- Benchmarking Metrics: {doc}`guide/metrics_reference`
 - Error Mitigation: {doc}`guide/error_mitigation`
 - API Reference: {doc}`api/index`
 - Releases: {doc}`releases/index`
@@ -20,13 +20,12 @@ guide/installation
 guide/quickstart
 guide/getting-started
 guide/features
-guide/benchmarking
 guide/providers
 guide/canonical_encoding
 guide/error_mitigation
 guide/exact_cover
 guide/aer_features
-guide/metrics
+guide/metrics_reference
 guide/examples
 guide/contributing
 ```

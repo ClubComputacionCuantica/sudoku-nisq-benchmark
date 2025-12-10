@@ -15,6 +15,11 @@ class AWSProvider(QuantumProvider):
     def provider_name(self) -> str:
         return "aws"
     
+    @property
+    def sdk_type(self) -> str:
+        """SDK used by AWS Braket provider."""
+        return "braket"
+    
     def authenticate(self, **kwargs) -> List[str]:
         """Authenticate with AWS Braket.
         
@@ -99,3 +104,27 @@ class AWSProvider(QuantumProvider):
         backend = f"AWS_Device({device})"  # Placeholder
         self._backends[name] = backend
         return backend
+    
+    def init_device(self, device: str, alias: Optional[str] = None, **kwargs: Any) -> str:
+        """Initialize device (authenticate if needed + add device) and return alias.
+        
+        Args:
+            device (str): Device ARN or name.
+            alias (Optional[str]): Custom alias for the device.
+            **kwargs: Additional device configuration and authentication parameters.
+            
+        Returns:
+            str: The alias for the initialized device.
+        """
+        # Authenticate if not already configured
+        if not self._configured:
+            auth_kwargs = {k: v for k, v in kwargs.items() 
+                          if k in ['aws_access_key_id', 'aws_secret_access_key', 'region']}
+            self.authenticate(**auth_kwargs)
+        
+        # Add device
+        device_kwargs = {k: v for k, v in kwargs.items() 
+                        if k not in ['aws_access_key_id', 'aws_secret_access_key', 'region']}
+        self.add_device(device, alias=alias, **device_kwargs)
+        
+        return alias or device

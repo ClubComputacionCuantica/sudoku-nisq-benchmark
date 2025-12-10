@@ -16,7 +16,7 @@ def main():
     print("\n1. Default: decompose_cnz=True (Consistent with Qiskit)")
     print("   Counts CnZ gates as their H+MCX+H decomposition")
     puzzle1.set_solver(ExactCoverQuantumSolver, encoding="simple", decompose_cnz=True)
-    circuit1 = puzzle1.build_circuit(sdk="pytket")
+    puzzle1.build_circuit(sdk="pytket")
     counts1 = puzzle1._solver.gate_counts
     
     print("\n   PyTKET gate counts (decomposed):")
@@ -27,7 +27,7 @@ def main():
     print("\n2. Optional: decompose_cnz=False (Native PyTKET gates)")
     print("   Counts CnZ as a single gate operation")
     puzzle2.set_solver(ExactCoverQuantumSolver, encoding="simple", decompose_cnz=False)
-    circuit2 = puzzle2.build_circuit(sdk="pytket")
+    puzzle2.build_circuit(sdk="pytket")
     counts2 = puzzle2._solver.gate_counts
     
     print("\n   PyTKET gate counts (native):")

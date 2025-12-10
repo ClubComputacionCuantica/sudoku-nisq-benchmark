@@ -61,8 +61,8 @@ result_zne = qs.solver.run(
 )
 
 # Access the mitigated success probability
-if hasattr(result_zne, '_mitigated_success_prob'):
-    mitigated_prob = result_zne._mitigated_success_prob
+if hasattr(result_zne, 'mitigated_success_prob'):
+    mitigated_prob = result_zne.mitigated_success_prob
     print(f"Mitigated success probability: {mitigated_prob:.4f}")
 
 # Standard measurement counts are still available

@@ -70,6 +70,15 @@ autodoc_default_options = {
 autodoc_default_options.update({'no-index': True})
 autodoc_typehints = 'description'
 
+# Mock optional provider dependencies for doc builds
+autodoc_mock_imports = [
+    'qiskit_ibm_runtime',
+    'qnexus',
+    'braket',
+    'braket.aws',
+    'boto3',
+]
+
 # TODOs in documentation
 todo_include_todos = True
 

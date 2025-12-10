@@ -6,8 +6,7 @@ PyTKET, Qiskit, and Braket backends with SDK-aware caching and metrics.
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from pytket import Circuit
 from pytket.extensions.qiskit import AerBackend
 
@@ -81,7 +80,7 @@ class TestPyTKETTranspilation:
     def test_pytket_metrics_extraction(self, puzzle_with_solver):
         """Test PyTKET-specific metrics are extracted correctly."""
         backend = AerBackend()
-        circuit = puzzle_with_solver.build_circuit(sdk="pytket")
+        puzzle_with_solver.build_circuit(sdk="pytket")
         
         # Transpile
         transpiled = puzzle_with_solver._solver._transpile_pytket(backend, opt_level=0)
@@ -114,10 +113,9 @@ class TestQiskitTranspilation:
     
     def test_qiskit_transpilation_with_aer(self, puzzle_with_solver):
         """Test Qiskit native transpilation with Aer backend."""
-        from qiskit_aer import AerSimulator
         
         # Build circuit in Qiskit format
-        circuit = puzzle_with_solver.build_circuit(sdk="qiskit")
+        puzzle_with_solver.build_circuit(sdk="qiskit")
         
         # Create Qiskit Aer backend (pass None to transpile to avoid coupling map constraints)
         backend = None  # Use None to transpile without backend constraints
@@ -131,10 +129,9 @@ class TestQiskitTranspilation:
     
     def test_qiskit_metrics_extraction(self, puzzle_with_solver):
         """Test Qiskit-specific metrics are preserved."""
-        from qiskit_aer import AerSimulator
         
         # Build and transpile
-        circuit = puzzle_with_solver.build_circuit(sdk="qiskit")
+        puzzle_with_solver.build_circuit(sdk="qiskit")
         backend = None  # Transpile without backend constraints
         transpiled = puzzle_with_solver._solver._transpile_qiskit(backend, opt_level=1)
         
@@ -153,11 +150,9 @@ class TestQiskitTranspilation:
     @pytest.mark.skip(reason="Qiskit QPY has issues with complex circuits - skip for now")
     def test_qiskit_circuit_caching(self, puzzle_with_solver):
         """Test Qiskit circuits are saved and loaded correctly."""
-        from qiskit_aer import AerSimulator
-        from qiskit import QuantumCircuit
         
         # Build circuit
-        circuit = puzzle_with_solver.build_circuit(sdk="qiskit")
+        puzzle_with_solver.build_circuit(sdk="qiskit")
         backend = None  # Transpile without backend constraints
         
         # Transpile
@@ -178,10 +173,9 @@ class TestQiskitTranspilation:
     
     def test_qiskit_type_check_in_transpilation(self, puzzle_with_solver):
         """Test that Qiskit transpilation validates circuit format."""
-        from qiskit_aer import AerSimulator
         
         # Build circuit in PyTKET format
-        circuit = puzzle_with_solver.build_circuit(sdk="pytket")
+        puzzle_with_solver.build_circuit(sdk="pytket")
         
         # Try to transpile with Qiskit (should fail - either TypeError or RuntimeError)
         backend = None
@@ -206,7 +200,7 @@ class TestBraketTranspilation:
     def test_braket_transpile_and_analyze_raises_error(self, puzzle_with_solver):
         """Test that transpile_and_analyze raises error for Braket."""
         # Build circuit
-        circuit = puzzle_with_solver.build_circuit(sdk="pytket")
+        puzzle_with_solver.build_circuit(sdk="pytket")
         
         # Create mock Braket backend
         mock_backend = Mock()
@@ -358,7 +352,7 @@ class TestMetadataTracking:
         backend = AerBackend()
         
         # Transpile
-        result = puzzle_with_solver._solver.transpile_and_analyze(
+        puzzle_with_solver._solver.transpile_and_analyze(
             backend, "metadata_test", opt_level=0
         )
         
@@ -374,10 +368,9 @@ class TestMetadataTracking:
     
     def test_metadata_preserves_all_metrics(self, puzzle_with_solver):
         """Test that all metrics are preserved in metadata."""
-        from qiskit_aer import AerSimulator
         
         # Build Qiskit circuit
-        circuit = puzzle_with_solver.build_circuit(sdk="qiskit")
+        puzzle_with_solver.build_circuit(sdk="qiskit")
         backend = None  # Transpile without backend constraints
         
         # Transpile with Qiskit
@@ -413,7 +406,6 @@ class TestIntegrationWorkflow:
     
     def test_full_qiskit_workflow(self, puzzle_with_solver):
         """Test complete Qiskit workflow: build → transpile → retrieve."""
-        from qiskit_aer import AerSimulator
         
         backend = None  # Use None to avoid coupling map constraints
         puzzle_with_solver._attached_backends["qiskit_aer"] = backend

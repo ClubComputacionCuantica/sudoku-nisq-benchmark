@@ -34,7 +34,7 @@ canonical_matrix2, _ = problem2.to_canonical_matrix()
 
 print(f"Universe: {universe}")
 print(f"Subsets: {subsets}")
-print(f"Canonical matrix:")
+print("Canonical matrix:")
 for row in canonical_matrix2:
     print(f"  {row}")
 

@@ -13,10 +13,7 @@ from sudoku_nisq.metadata_manager import MetadataManager
 from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
 
 if TYPE_CHECKING:
-    try:
-        from qiskit_aer import AerSimulator
-    except ImportError:  # pragma: no cover
-        pass
+    pass
 
 
 class QExactCover:

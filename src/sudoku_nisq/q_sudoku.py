@@ -943,7 +943,6 @@ class QSudoku():
                 f"No transpiled circuit found for {backend_alias} at opt_level {opt_level}. "
                 f"Run transpile() or run() first."
             )
-            return self._solver.load_circuit(path)
 
     def run(self, backend_alias: str, opt_level: int, shots: int, **kwargs):
         """Execute the quantum circuit on the specified hardware backend.
