@@ -31,6 +31,25 @@ $$
 \end{align*}
 $$
 
+where:
+- $\mathcal{I} = \{I_1, \ldots, I_N\}$: set of $N$ test problem instances
+- $\mu$: instance sampling distribution (probability measure over $\mathcal{I}$)
+- $I_k \in \mathcal{I}$: selected instance from the test set (index $k \in \{1, \ldots, N\}$)
+- $I$: the specific instance being benchmarked
+- $\mathsf{C}_{IR}$: Intermediate Representation (IR) transformation policy (target-independent compilation rules)
+- $\mathrm{IR}(I)$: logical intermediate representation for instance $I$ (platform-agnostic circuit)
+- $\mathsf{C}(\theta)$: compilation policy with parameters $\theta \in \Theta$ (optimization level, seed, routing)
+- $\text{Circ}^{\text{native}}$: hardware-native circuit (gates from device's native set)
+- $\mathrm{Exec}$: executable low-level control sequence (pulses, timings, calibrations)
+- $\mathcal{H}_t$: time-dependent hardware state at execution time $t$
+- $N_{\text{shots}} \in \mathbb{N}$: measurement shot budget
+- $\{\text{bitstring}_i\}_{i=1}^{N_{\text{shots}}}$: collection of measured computational basis states, each $\text{bitstring}_i \in \{0,1\}^n$
+- $\alpha$: preprocessing map converting raw counts to probability distribution
+- $\{p(x): x \in \{0,1\}^n\}$: empirical probability distribution over $n$-qubit bitstrings
+- $\sigma$: scoring functional evaluating performance relative to valid solutions
+- $\tau$: normalization rule mapping (score, resources) to figure of merit
+- FOM: Figure of Merit (normalized performance metric)
+
 Each stage has precise meaning and corresponding implementation in this system:
 
 #### Stage 1: Algorithm & Test Instances ($\mathcal{I}$)
@@ -79,8 +98,9 @@ Concretely: record the RNG library/version and generator name (e.g., NumPy PCG64
 
 Note: Sudoku generation is currently non-deterministic (no public seeding); therefore, benchmarks using stochastic sampling must persist the effective seeds or source templates as part of metadata to enable reproduction.
 
+#### Stage 2 Intermediate Representation
 
-#### Stage 2a: IR Construction – Logical Circuit
+##### Stage 2a: IR Construction – Logical Circuit
 
 The logical, platform-agnostic circuit artifact that describes the algorithm's quantum behavior, encompassing the circuit structure and its interpretation.
 
