@@ -55,7 +55,7 @@ Each stage has precise meaning and corresponding implementation in this system:
 #### Stage 1: Algorithm & Test Instances ($\mathcal{I}$)
 
 
-Selection of computational task and instantiation of test problem instances $\mathcal{I} = \{I_1, I_2, \ldots, I_N\}$ where $N \in \mathbb{N}$ is the number of test instances, each characterized by problem size, constraint structure, and solution space cardinality.
+Selection of computational task and instantiation of test problem instances $\mathcal{I} = \{I_1, I_2, \ldots, I_N\}$, each characterized by problem size, constraint structure, and solution space cardinality.
 
 **sudoku-nisq implementation**
 
@@ -113,9 +113,11 @@ $$
 where:
 - $I$: problem instance from test set $\mathcal{I}$
 - $\mathcal{G}^{(r)}: \mathcal{H}_n \to \mathcal{H}_n$: Grover operator with $r \in \mathbb{N}$ iterations on $n$-qubit Hilbert space $\mathcal{H}_n$
-- $\mathcal{O}_I: \{0,1\}^n \to \{0,1\}$: oracle encoding instance $I$ constraints (marks solutions)
-- $\mathcal{D}$: diffusion operator (inversion-about-average)
-- $r$: number of Grover iterations (typically $\sim \frac{\pi}{4}\sqrt{2^n/|\text{Sol}(I)|}$ for optimal amplification)
+
+$\mathcal{G}^{(r)}$ depends on
+- $\mathcal{O}_I$: an oracle unitary operator implementing phase flip which depends on the specific exact cover problem
+- $\mathcal{D}$: Grover diffusion operator 
+- $r$: number of Grover iterations dependent on number of solutions
 
 However, IR is broader in scope:
 - Includes initial state preparation (e.g., uniform superposition), ancilla allocation and usage, and measurement definitions/basis choices.
@@ -181,7 +183,7 @@ $$
 $$
 
 where:
-- $\text{IR}$: logical intermediate representation (platform-agnostic circuit)
+- $\text{IR}$: logical intermediate representation (abstract, platform-agnostic circuit)
 - $\mathcal{H}$: hardware specification (topology graph, native gate set, qubit connectivity, coherence properties)
 - $\theta \in \Theta$: compilation parameters from policy space $\Theta$ (optimization level, transpiler seed, routing strategy)
 - $\text{Circuit}^{\text{native}}$: hardware-native circuit using gates from $\mathcal{H}$'s native set
