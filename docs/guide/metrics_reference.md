@@ -36,7 +36,7 @@ Each stage has precise meaning and corresponding implementation in this system:
 #### Stage 1: Algorithm & Test Instances ($\mathcal{I}$)
 
 
-Selection of computational task and instantiation of test problem instances $\mathcal{I} = \{I_1, I_2, \ldots, I_n\}$, each characterized by problem size, constraint structure, and solution space cardinality.
+Selection of computational task and instantiation of test problem instances $\mathcal{I} = \{I_1, I_2, \ldots, I_N\}$ where $N \in \mathbb{N}$ is the number of test instances, each characterized by problem size, constraint structure, and solution space cardinality.
 
 **sudoku-nisq implementation**
 
@@ -91,9 +91,11 @@ $$
 $$
 
 where:
-- $\mathcal{G}^{(r)}$: Grover operator with $r$ iterations
-- $\mathcal{O}_I$: Oracle encoding instance constraints
-- $\mathcal{D}$: Diffusion operator
+- $I$: problem instance from test set $\mathcal{I}$
+- $\mathcal{G}^{(r)}: \mathcal{H}_n \to \mathcal{H}_n$: Grover operator with $r \in \mathbb{N}$ iterations on $n$-qubit Hilbert space $\mathcal{H}_n$
+- $\mathcal{O}_I: \{0,1\}^n \to \{0,1\}$: oracle encoding instance $I$ constraints (marks solutions)
+- $\mathcal{D}$: diffusion operator (inversion-about-average)
+- $r$: number of Grover iterations (typically $\sim \frac{\pi}{4}\sqrt{2^n/|\text{Sol}(I)|}$ for optimal amplification)
 
 However, IR is broader in scope:
 - Includes initial state preparation (e.g., uniform superposition), ancilla allocation and usage, and measurement definitions/basis choices.
@@ -159,8 +161,10 @@ $$
 $$
 
 where:
-- $\mathcal{H}$: Hardware specification (topology, native gates, qubit properties)
-- $\theta$: Compilation parameters (optimization level, seed, routing strategy)
+- $\text{IR}$: logical intermediate representation (platform-agnostic circuit)
+- $\mathcal{H}$: hardware specification (topology graph, native gate set, qubit connectivity, coherence properties)
+- $\theta \in \Theta$: compilation parameters from policy space $\Theta$ (optimization level, transpiler seed, routing strategy)
+- $\text{Circuit}^{\text{native}}$: hardware-native circuit using gates from $\mathcal{H}$'s native set
 
 **sudoku-nisq implementation:**
 - `QuantumSolver._transpile_qiskit()`: Uses `generate_preset_pass_manager` or `qiskit.compiler.transpile`
@@ -225,6 +229,11 @@ $$
 \text{Circuit}^{\text{native}} \xrightarrow{\text{backend compiler}} \text{Executable}(\text{pulses}, \text{timings}, \text{calibrations})
 $$
 
+where:
+- $\text{Circuit}^{\text{native}}$: gate-level circuit from Stage 3
+- backend compiler: provider-controlled pulse synthesis and scheduling pipeline
+- $\text{Executable}$: low-level control sequence (pulse schedules, microwave waveforms, timing constraints, calibration parameters)
+
 **sudoku-nisq implementation:**
 - Provider-specific job submission via `BackendManager` and `providers/` modules. This stage is entirely backend-controlled; users influence it only by choosing the backend and supplying the gate-level circuit from Stage 3.
 
@@ -254,7 +263,11 @@ $$
    \text{Execution}(\text{Executable}, N_{\text{shots}}, \mathcal{H}_t) \longrightarrow \{\text{bitstring}_i\}_{i=1}^{N_{\text{shots}}}
 $$
 
-where $N_{\text{shots}}$ is the sampling budget and $\mathcal{H}_t$ is the time-dependent hardware state (calibration snapshot, coherence, error rates).
+where:
+- $N_{\text{shots}} \in \mathbb{N}$: sampling budget (number of measurement repetitions)
+- $\mathcal{H}_t$: time-dependent hardware state at timestamp $t$ (calibration snapshot, coherence times, gate error rates)
+- $\text{bitstring}_i \in \{0,1\}^n$: the $i$-th measured computational basis state
+- $n \in \mathbb{N}$: number of qubits in the circuit
 
 **sudoku-nisq implementation:**
 - `QuantumSolver.run()` submits the compiled circuit with the requested shots
@@ -282,16 +295,22 @@ print(f"Hardware: {result.backend_name} at {result.timestamp}")
 Application of analysis pipeline to convert raw measurement counts to performance scores:
 
 $$
-\alpha: \{\text{bitstring}_i, n_i\}_{i} \mapsto \{p(x): x \in \{0,1\}^n\}
+\alpha: \{(\text{bitstring}_i, n_i)\}_{i=1}^{m} \mapsto \{p(x): x \in \{0,1\}^n\}
 $$
 
 $$
-\sigma: \{p(x)\}, \text{Sol}(I) \mapsto \text{Performance Score}
+\sigma: \{p(x): x \in \{0,1\}^n\}, \text{Sol}(I) \mapsto \mathbb{R}_{\geq 0}
 $$
 
 where:
-- $\alpha$ normalizes counts to probability distribution
-- $\sigma$ evaluates quality relative to valid solution set $\text{Sol}(I)$
+- $m \in \mathbb{N}$: number of distinct observed bitstrings
+- $\text{bitstring}_i \in \{0,1\}^n$: the $i$-th distinct measured bitstring
+- $n_i \in \mathbb{N}$: observed count (frequency) of $\text{bitstring}_i$, with $\sum_{i=1}^{m} n_i = N_{\text{shots}}$
+- $n \in \mathbb{N}$: number of qubits (bitstring length)
+- $\alpha$: preprocessing map that normalizes counts to probability distribution over $\{0,1\}^n$
+- $p(x) = \frac{n_x}{N_{\text{shots}}} \in [0,1]$: empirical probability of bitstring $x$, where $n_x$ is its observed count
+- $\text{Sol}(I) \subseteq \{0,1\}^n$: set of valid solutions for instance $I$
+- $\sigma$: scoring functional that evaluates quality relative to $\text{Sol}(I)$ (returns performance score $\in \mathbb{R}_{\geq 0}$)
 
 **sudoku-nisq implementation:**
 - `SuccessMetricsCalculator`: Implements $\alpha$ (counts → probabilities) and $\sigma$ (validation)
@@ -324,8 +343,13 @@ distinct = SuccessMetricsCalculator.calculate_distinct_solutions(result.counts, 
 Normalization by resource consumption to enable fair cross-platform comparison:
 
 $$
-\tau: (\sigma, \text{Resources}) \mapsto \text{Figure of Merit}
+\tau: (\mathbb{R}_{\geq 0} \times \mathcal{R}) \mapsto \mathbb{R}_{\geq 0}
 $$
+
+where:
+- $\mathbb{R}_{\geq 0}$: domain of performance scores (output of $\sigma$)
+- $\mathcal{R}$: resource parameter space (gate counts $G_{2q} \in \mathbb{N}$, circuit volume $V \in \mathbb{N}$, shot count $N_{\text{shots}} \in \mathbb{N}$)
+- $\tau$: normalization rule mapping (score, resources) to normalized figure of merit
 
 Used metrics (See following section):
 
