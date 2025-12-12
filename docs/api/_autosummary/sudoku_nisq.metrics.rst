@@ -1,7 +1,7 @@
-﻿sudoku_nisq.solvers
+﻿sudoku_nisq.metrics
 ===================
 
-.. automodule:: sudoku_nisq.solvers
+.. automodule:: sudoku_nisq.metrics
    :members:
    :undoc-members:
    :show-inheritance:

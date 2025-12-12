@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.quantum\_solver
-============================
+﻿sudoku_nisq.quantum_solver
+==========================
 
-.. currentmodule:: sudoku_nisq
-
-.. autodata:: quantum_solver
+.. automodule:: sudoku_nisq.quantum_solver
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

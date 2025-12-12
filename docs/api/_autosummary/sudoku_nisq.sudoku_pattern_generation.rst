@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.sudoku\_pattern\_generation
-========================================
+﻿sudoku_nisq.sudoku_pattern_generation
+=====================================
 
-.. currentmodule:: sudoku_nisq
-
-.. autodata:: sudoku_pattern_generation
+.. automodule:: sudoku_nisq.sudoku_pattern_generation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

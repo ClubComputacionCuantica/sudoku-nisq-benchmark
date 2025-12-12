@@ -33,11 +33,13 @@ This makes Sudoku accessible to study current limitations of quantum devices.
 
 ## Key Features
 
-- **Multiple Solver Algorithms and Encodings**: Framework scaffolding for multiple solvers; currently only `ExactCoverQuantumSolver` is functional.
-- **Hardware Integration (IBM Tested)**: IBM Quantum backends are the only provider actively tested and supported right now. Quantinuum and Braket hooks exist as placeholders/in development and are not yet stable for end users.
-- **Circuit Caching and Memory Management**: Intelligent caching to avoid redundant computation.
+- **Exact-cover Sudoku to circuits**: Encodes Sudoku (and generic exact cover problems) into Grover-style quantum circuits with simple or pattern encodings.
+- **Multi-SDK circuit builds**: Construct circuits with PyTKET, Qiskit, or Braket; caching keeps builds reproducible and fast.
+- **Resource introspection**: Automatic gate counting, qubit/depth metadata, and optional memory tracking during circuit construction.
+- **Backend plumbing**: IBM backends are tested; Aer simulation is first-class. Hooks for Quantinuum and Braket exist but are still maturing.
+- **Benchmarking scaffolding**: Metrics/data models for success probability, gate/volume efficiency, and hardware/transpile metadata collection.
 
-> Note: Provider abstractions expose aliases for future devices, but non‑IBM backends may raise `NotImplementedError` or produce incomplete results until native circuits and authentication flows are finalized.
+> Note: Non-IBM hardware paths are experimental; expect partial coverage or `NotImplementedError` while native flows are finalized.
 
 ---
 
@@ -179,10 +181,10 @@ The framework aims to:
 
 ## Current Limitations
 
-- Only the **ExactCoverQuantumSolver** is fully implemented; other solvers are placeholders.
-- Real hardware cannot yet reliably solve even small 4x4 puzzles.
-- Circuits are not yet fully optimized.
-- Only IBM Quantum backends are currently supported; Quantinuum and others are not yet tested.
+- Only the **ExactCoverQuantumSolver** is production-ready; other solver classes are placeholders.
+- Real hardware remains challenged beyond toy (2x2) or small 4x4 instances.
+- Circuit optimization and transpilation strategies are still evolving.
+- IBM paths are validated; Quantinuum/Braket provider flows are in-progress and may be incomplete.
 
 ---
 
@@ -191,6 +193,12 @@ The framework aims to:
 - Optimize circuit designs for better scalability.
 - Extend support for additional quantum hardware providers.
 - Develop new encoding strategies for improved efficiency.
+
+---
+
+## Maintainer
+
+- Roberto Navarro A (Quantum Algorithms Group, ESFM - IPN)
 
 ---
 

@@ -198,38 +198,18 @@ class ExactCoverProblem:
         return matrix
     
     def to_canonical_matrix(self) -> Tuple[List[List[int]], List[Any]]:
-        """
-        Compute the canonical incidence matrix for this exact cover instance.
-        
-        The canonical matrix is constructed as follows:
-        1. Order universe elements U = {u_0, ..., u_{n-1}} canonically (sorted)
-        2. For each subset S_j, form column vector b_j where (b_j)_i = 1 iff u_i ∈ S_j
-        3. Remove duplicate columns (note: since subsets is a dict, duplicates only
-           arise if different subset keys map to identical element sets)
-        4. Sort remaining columns lexicographically (as bitstrings)
-        
-        This yields a unique matrix A* ∈ {0,1}^{n×m*} for the instance,
-        independent of the original labeling or ordering.
-        
-        Note: Exact cover instances treat the collection of subsets as a set
-        (no multiplicity). Duplicate subsets are removed during canonicalization.
-        
+        """Return a canonical incidence matrix for this instance.
+
+        The canonical matrix is built by:
+        - sorting the universe labels;
+        - converting each subset into a column bitvector over the sorted universe;
+        - dropping duplicate columns; and
+        - sorting the remaining columns lexicographically.
+
         Returns:
-            Tuple containing:
-                - canonical_matrix (List[List[int]]): The n×m* canonical 0-1 matrix
-                - ordered_universe (List[Any]): The canonically ordered universe elements
-        
-        Example:
-            >>> universe = ['b', 'a', 'c']
-            >>> subsets = {'S_0': ['a', 'b'], 'S_1': ['b', 'c'], 'S_2': ['a', 'b']}
-            >>> problem = ExactCoverProblem(universe, subsets)
-            >>> matrix, ordered_u = problem.to_canonical_matrix()
-            >>> # ordered_u = ['a', 'b', 'c'] (sorted)
-            >>> # Duplicate columns removed, remaining sorted lexicographically
-        
-        Note:
-            This is a key step in embedding exact cover instances into
-            the global total order for theoretical analysis.
+            A tuple ``(canonical_matrix, ordered_universe)`` where ``canonical_matrix``
+            is an ``n x m*`` binary matrix in row-major order and ``ordered_universe``
+            is the sorted list of universe elements.
         """
         # Step 1: Order universe elements canonically
         try:
@@ -279,44 +259,12 @@ class ExactCoverProblem:
         return canonical_matrix, ordered_universe
     
     def to_canonical_encoding(self) -> str:
-        """
-        Encode this exact cover instance as a canonical binary string.
-        
-        Implements the encoding scheme:
-            enc(A*) = un(n) ; un(m) ; bits(A*)
-        
-        where:
-        - un(k) = "1"*k + "0" (unary encoding: k ones followed by zero)
-          * un(0) = "0"
-          * un(1) = "10"
-          * un(2) = "110", etc.
-        - bits(A*) = concatenation of all matrix entries in row-major order
-        
-        The resulting binary string uniquely identifies this exact cover instance
-        in the global shortlex order of all finite exact cover problems.
-        
-        Returns:
-            str: Binary string encoding (e.g., "110010111000101...")
-        
-        Example:
-            >>> # 2×2 identity matrix (after canonicalization)
-            >>> problem = ExactCoverProblem.from_incidence_matrix([[1,0], [0,1]])
-            >>> encoding = problem.to_canonical_encoding()
-            >>> # Canonical matrix (columns sorted): [[0,1], [1,0]]
-            >>> # un(2) = "110", un(2) = "110", bits = "0110"
-            >>> encoding
-            '1101100110'
-        
-        Note:
-            Two exact cover instances have the same encoding if and only if
-            they have the same canonical incidence matrix (i.e., are isomorphic).
-            This defines an injective mapping from exact cover isomorphism classes
-            to binary strings, inducing a total order via shortlex.
-            
-        Reference:
-            This encoding is used to embed exact cover problems into the
-            universal space {0,1}* with shortlex order, as formalized in
-            the theoretical framework for comparing problem instances.
+        """Encode the canonical matrix as a shortlex-stable bitstring.
+
+        The encoding is ``un(n) + un(m) + bits(A*)`` where ``un(k)`` is unary
+        (``"1" * k + "0"``) and ``bits(A*)`` are the entries of the canonical
+        incidence matrix in row-major order. Isomorphic instances share the same
+        encoding.
         """
         canonical_matrix, _ = self.to_canonical_matrix()
         
@@ -488,31 +436,16 @@ class ExactCoverProblem:
                         continue
     
     def count_solutions(self, max_solutions: Optional[int] = None) -> int:
-        """
-        Count the number of exact cover solutions for this instance.
+        """Count exact covers with a pruning backtracking search.
 
-        Uses a backtracking search:
-        - Each solution is a set of subsets such that every universe element
-          is covered exactly once (no overlaps, no omissions).
-        - This is exponential in general, so it's intended for small/medium
-          instances or sanity checks.
+        The search branches on the element with the fewest covering subsets and
+        stops early when ``max_solutions`` is reached.
 
         Args:
-            max_solutions:
-                Optional cap on the number of solutions to count.
-                If provided, the search stops early once this many
-                solutions are found and returns that value.
-                (Useful for SAT checks with max_solutions=1.)
+            max_solutions: Stop after this many solutions (helps SAT-style checks).
 
         Returns:
-            int: Number of exact covers found (<= max_solutions if provided).
-        
-        Example:
-            >>> problem = ExactCoverProblem(universe, subsets)
-            >>> n_solutions = problem.count_solutions()
-            >>> 
-            >>> # Check if solvable
-            >>> has_solution = problem.count_solutions(max_solutions=1) > 0
+            Number of solutions found (capped at ``max_solutions`` when set).
         """
         # Map each element to the subset keys that contain it
         elem_to_subsets: Dict[Any, List[str]] = {}
@@ -571,27 +504,7 @@ class ExactCoverProblem:
     
     @staticmethod
     def create_small_example() -> 'ExactCoverProblem':
-        """
-        Create a small example problem for testing.
-        
-        Returns:
-            ExactCoverProblem: A 4-element, 6-subset problem with 1 exact cover solution
-        
-        Example:
-            Universe: {0, 1, 2, 3}
-            Subsets: 
-                S_0: {0, 3}
-                S_1: {0, 1, 2}
-                S_2: {1, 2}
-                S_3: {2, 3}
-                S_4: {0}
-                S_5: {1, 3}
-            
-            Solution: {S_0, S_2} covers all elements exactly once:
-                S_0 = {0, 3}
-                S_2 = {1, 2}
-                Union = {0, 1, 2, 3} ✓
-        """
+        """Return a 4-element toy instance with one exact cover solution."""
         universe = [0, 1, 2, 3]
         subsets = {
             'S_0': [0, 3],

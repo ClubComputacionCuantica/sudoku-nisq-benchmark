@@ -52,6 +52,7 @@ else:
 
 # Autosummary
 autosummary_generate = True
+templates_path = ['_templates']
 
 # Napoleon (Google style docstrings)
 napoleon_google_docstring = True
@@ -70,14 +71,6 @@ autodoc_default_options = {
 autodoc_default_options.update({'no-index': True})
 autodoc_typehints = 'description'
 
-# Mock optional provider dependencies for doc builds
-autodoc_mock_imports = [
-    'qiskit_ibm_runtime',
-    'qnexus',
-    'braket',
-    'braket.aws',
-    'boto3',
-]
 
 # TODOs in documentation
 todo_include_todos = True
@@ -153,7 +146,7 @@ def linkcode_resolve(domain, info):  # noqa: D401
         f"{fn}#L{lineno}-L{end_line}"
     )
 
-html_theme = 'furo'  # modern theme; switch if desired
+html_theme = 'furo'  # revert to default theme
 html_title = project
 html_last_updated_fmt = '%Y-%m-%d'
 html_baseurl = 'https://ClubComputacionCuantica.github.io/sudoku-nisq-benchmark/'
@@ -167,7 +160,6 @@ html_extra_path = ['robots.txt']
 
 # Mock heavy/optional dependencies during autodoc to keep builds light
 autodoc_mock_imports = [
-    'sudoku_nisq',
     'qiskit',
     'qiskit_ibm_runtime',
     'pytket',
@@ -176,6 +168,8 @@ autodoc_mock_imports = [
     'braket',
     'braket.aws',
     'amazon_braket_sdk',
+    'qnexus',
+    'boto3',
 ]
 
 # TODO: Add html_theme_options if customization required
@@ -195,9 +189,59 @@ intersphinx_mapping = {
 exclude_patterns = [
     'internal/**',  # docs/internal/*
 ]
+
+# Furo theme customization with blue color scheme
 html_theme_options = {
-     # Keep nav predictable; Furo orders by toctree.
-     'sidebar_hide_name': False,
+    "light_css_variables": {
+        # Brand colors - deep blue theme
+        "color-brand-primary": "#004aad",
+        "color-brand-content": "#004aad",
+        
+        # Backgrounds
+        "color-background-primary": "#faf8f8",  # soft neutral background
+        "color-background-secondary": "#e5e5e5",  # lightgray
+        "color-background-hover": "rgba(0, 74, 173, 0.08)",  # blue highlight
+        "color-background-border": "#b8b8b8",  # gray
+        
+        # Foregrounds (text)
+        "color-foreground-primary": "#4e4e4e",  # darkgray
+        "color-foreground-secondary": "#5a6c7d",  # blue-gray
+        "color-foreground-muted": "#b8b8b8",  # gray
+        "color-foreground-border": "#e5e5e5",  # lightgray
+        
+        # Code blocks
+        "color-inline-code-background": "#e5e5e5",
+        
+        # Links
+        "color-link": "#004aad",
+        "color-link-underline": "#0066cc",  # lighter blue
+        "color-link-underline--hover": "#004aad",
+    },
+    "dark_css_variables": {
+        # Brand colors - bright blue theme
+        "color-brand-primary": "#4A9EFF",
+        "color-brand-content": "#4A9EFF",
+        
+        # Backgrounds
+        "color-background-primary": "#1e1e1e",  # matches dark background
+        "color-background-secondary": "#393639",  # lightgray in dark
+        "color-background-hover": "rgba(74, 158, 255, 0.12)",  # blue highlight
+        "color-background-border": "#646464",  # gray in dark
+        
+        # Foregrounds (text)
+        "color-foreground-primary": "#d4d4d4",  # darkgray in dark
+        "color-foreground-secondary": "#8fb4d4",  # light blue-gray
+        "color-foreground-muted": "#646464",  # gray in dark
+        "color-foreground-border": "#393639",  # lightgray in dark
+        
+        # Code blocks
+        "color-inline-code-background": "#393639",
+        
+        # Links
+        "color-link": "#4A9EFF",
+        "color-link-underline": "#6BB1FF",  # lighter blue
+        "color-link-underline--hover": "#4A9EFF",
+    },
 }
 
 # Reduce noise from autosummary-generated stub pages not linked explicitly

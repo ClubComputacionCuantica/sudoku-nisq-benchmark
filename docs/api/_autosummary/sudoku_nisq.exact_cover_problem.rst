@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.exact\_cover\_problem
-==================================
+﻿sudoku_nisq.exact_cover_problem
+===============================
 
-.. currentmodule:: sudoku_nisq
-
-.. autodata:: exact_cover_problem
+.. automodule:: sudoku_nisq.exact_cover_problem
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

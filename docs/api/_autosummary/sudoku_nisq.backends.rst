@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.backends
-=====================
+﻿sudoku_nisq.backends
+====================
 
-.. currentmodule:: sudoku_nisq
-
-.. autodata:: backends
+.. automodule:: sudoku_nisq.backends
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

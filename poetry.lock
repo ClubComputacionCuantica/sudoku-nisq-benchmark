@@ -1319,6 +1319,18 @@ files = [
 ]
 
 [[package]]
+name = "insegel"
+version = "1.3.1"
+description = "Clean, minimalist Sphinx theme for deploying on ReadTheDocs"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "insegel-1.3.1-py3-none-any.whl", hash = "sha256:6cf0a2d7e97f724a31a63b0e59100a011b96a767840a7d834ad697a90274c2e1"},
+    {file = "insegel-1.3.1.tar.gz", hash = "sha256:1d055dd64f6eb335580a485271511ba2f4e3b5e315f48f827f58da3cace4b4ae"},
+]
+
+[[package]]
 name = "ipykernel"
 version = "6.31.0"
 description = "IPython Kernel for Jupyter"
@@ -4743,4 +4755,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "c4818c34609cbe8cf5dbfe4edb2d9697ef6856fd08383c6c32a82d17a60d86ca"
+content-hash = "2ade8f243a2fb61bec3111a8ac6d3448b7f4854e8a07209c0b9059dbd7f36fab"

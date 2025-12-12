@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.sudoku\_puzzle
-===========================
+﻿sudoku_nisq.sudoku_puzzle
+=========================
 
-.. currentmodule:: sudoku_nisq
-
-.. autodata:: sudoku_puzzle
+.. automodule:: sudoku_nisq.sudoku_puzzle
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

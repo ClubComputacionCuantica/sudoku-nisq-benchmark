@@ -7,7 +7,6 @@ API Reference
 
    sudoku_nisq
    sudoku_nisq.backends
-   sudoku_nisq.benchmark
    sudoku_nisq.circuits
    sudoku_nisq.encodings
    sudoku_nisq.exact_cover_problem
@@ -21,11 +20,10 @@ API Reference
    sudoku_nisq.sudoku_puzzle
    sudoku_nisq.utils
 
-.. note::
-   TODO: Curate which symbols are public; hide internal helpers.
-
 .. toctree::
    :hidden:
    :glob:
 
+   sudoku_nisq.metadata_manager
+   sudoku_nisq.metrics
    /api/_autosummary/*

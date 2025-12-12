@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.metadata\_manager
-==============================
+﻿sudoku_nisq.metadata_manager
+============================
 
 .. automodule:: sudoku_nisq.metadata_manager
-	:members:
-	:undoc-members:
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:

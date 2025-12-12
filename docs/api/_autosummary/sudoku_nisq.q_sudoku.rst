@@ -1,6 +1,8 @@
-﻿sudoku\_nisq.q\_sudoku
-======================
+﻿sudoku_nisq.q_sudoku
+====================
 
-.. currentmodule:: sudoku_nisq
-
-.. autodata:: q_sudoku
+.. automodule:: sudoku_nisq.q_sudoku
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :no-index:
