@@ -11,7 +11,9 @@ The quantum benchmarking process follows a sequence that translates a conceptual
 
 $$
 \begin{align*}
-   (\mathcal{I}, \mu) &\xrightarrow{\text{select } I_k} \text{Instance } I \\
+   &(\mathcal{I}, \mu) \\
+   &\downarrow \text{select } I_k \\
+   &\text{Instance } I \\
    &\downarrow \mathsf{C}_{IR} \\
    &\mathrm{IR}(I) \\
    &\downarrow \mathsf{C}(\theta) \\
@@ -182,22 +184,9 @@ Recorded compilation artifacts (deterministic and reproducible):
 
 Pending controls: pass-level configuration (explicit optimisation passes/families) are not recorded yet, but SDKs support these settings; we will surface and record them when exposed in the public API.
 
+**Implementation Family ($\mathsf{C}$ scope)**
+
 Different compilation policies can produce vastly different resource profiles for identical algorithms. The complete benchmark specification $\mathbf{B}^\star$ **requires explicit documentation** of $\mathsf{C}$ for reproducibility.
-
-**Code example:**
-```python
-result = qs.run(
-    backend=backend,
-    backend_alias="ibm_brisbane",
-    shots=2048,
-    optimisation_level=2,  # θ_opt
-    transpiler_seed=42      # θ_seed for reproducible 𝖢
-)
-# Post-transpilation metrics available in result.gate_counts
-```
-
----
-### Implementation Family ($\mathsf{C}$ scope)
 
 Abstractly, the allowed implementation family specifies the space of legal transformations between IR and native circuits: decomposition choices, routing/layout strategies, optimization classes, ancilla use, and controls on non-determinism. This complements Stage 2b's target-independent IR policy ($\mathsf{C}_{\text{IR}}$) by defining Stage 3's target-aware scope (what mappings are permitted on the way to native gates).
 
@@ -212,6 +201,20 @@ To ensure reproducibility, we treat $\mathsf{C}$ as a **constraint set** that li
 - build-time decomposition choice: record solver option `decompose_cnz` when constructing oracles and multi-controlled subroutines.
 
 When parameters aren’t set, note the provider/compiler defaults (e.g., preset pass manager vs `qiskit.transpile`, PyTKET `get_compiled_circuit`, and no client-side Braket transpilation). Documenting these items constrains $\mathsf{C}$ to a reproducible subset of behaviors without relying on pass-specific or ancilla-policy terminology.
+
+**Code example:**
+```python
+result = qs.run(
+    backend=backend,
+    backend_alias="ibm_brisbane",
+    shots=2048,
+    optimisation_level=2,  # θ_opt
+    transpiler_seed=42      # θ_seed for reproducible 𝖢
+)
+# Post-transpilation metrics available in result.gate_counts
+```
+
+---
 
 
 #### Stage 4: Executable – Low-Level Compilation
