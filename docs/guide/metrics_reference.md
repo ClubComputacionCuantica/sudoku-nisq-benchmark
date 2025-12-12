@@ -107,16 +107,13 @@ The logical, platform-agnostic circuit artifact that describes the algorithm's q
 For Grover-based exact-cover formulations, a useful shorthand is:
 
 $$
-	\text{IR}(I) = \mathcal{G}^{(r)}(\mathcal{O}_I, \mathcal{D})
+	\text{IR}(I) = \mathcal{G}^{(r)}(\mathcal{O}_I)
 $$
 
 where:
 - $I$: problem instance from test set $\mathcal{I}$
 - $\mathcal{G}^{(r)}: \mathcal{H}_n \to \mathcal{H}_n$: Grover operator with $r \in \mathbb{N}$ iterations on $n$-qubit Hilbert space $\mathcal{H}_n$
-
-$\mathcal{G}^{(r)}$ depends on
 - $\mathcal{O}_I$: an oracle unitary operator implementing phase flip which depends on the specific exact cover problem
-- $\mathcal{D}$: Grover diffusion operator 
 - $r$: number of Grover iterations dependent on number of solutions
 
 However, IR is broader in scope:
