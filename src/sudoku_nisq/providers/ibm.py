@@ -16,7 +16,7 @@ class IBMProvider(QuantumProvider):
     features like dynamic circuits, pulse-level control, and error mitigation.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize IBM provider."""
         super().__init__()
         self._service: Optional[QiskitRuntimeService] = None

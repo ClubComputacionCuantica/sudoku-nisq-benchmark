@@ -1,8 +1,14 @@
 """Comprehensive tests for explicit SDK selection feature."""
 
 import pytest
-from sudoku_nisq import QSudoku
-from sudoku_nisq.solvers import ExactCoverQuantumSolver
+
+pytest.importorskip("pytket")
+pytest.importorskip("qiskit")
+
+pytestmark = pytest.mark.integration
+
+from sudoku_nisq import QSudoku  # noqa: E402
+from sudoku_nisq.solvers import ExactCoverQuantumSolver  # noqa: E402
 
 
 class TestSDKSelection:

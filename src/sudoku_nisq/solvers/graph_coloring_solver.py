@@ -16,7 +16,7 @@ class GraphColoringQuantumSolver(QuantumSolver):
     Attributes:
         Inherits all attributes from QuantumSolver base class including:
         - puzzle: The Sudoku puzzle instance to solve
-        - metadata_manager: Manager for caching and metadata operations
+        - cache_base: Base directory for caching circuits and metadata
         - encoding: Encoding strategy for quantum representation
         - store_transpiled: Flag for saving transpiled circuits
         
@@ -24,19 +24,19 @@ class GraphColoringQuantumSolver(QuantumSolver):
         .. code-block:: python
 
             from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
-            from sudoku_nisq.metadata_manager import MetadataManager
+            from pathlib import Path
 
             puzzle = SudokuPuzzle(grid=[[0, 2, 0], [1, 0, 3], [0, 4, 0]])
-            metadata_mgr = MetadataManager()
+            cache_dir = Path(".quantum_solver_cache")
 
             solver = GraphColoringQuantumSolver(
                 puzzle=puzzle,
-                metadata_manager=metadata_mgr,
+                cache_base=cache_dir,
                 encoding="graph"
             )
     """
 
-    def __init__(self, puzzle, metadata_manager, encoding=None, store_transpiled=True, **kwargs):
+    def __init__(self, puzzle, cache_base=None, encoding=None, store_transpiled=True, **kwargs):
         """Initialize the GraphColoringQuantumSolver instance.
         
         Sets up a quantum Sudoku solver that will use graph coloring algorithms to find
@@ -47,8 +47,8 @@ class GraphColoringQuantumSolver(QuantumSolver):
         Args:
             puzzle: The SudokuPuzzle instance containing the initial puzzle state
                 and constraints to solve.
-            metadata_manager: The MetadataManager instance responsible for caching
-                quantum circuits, metadata storage, and performance tracking.
+            cache_base: Base directory for caching quantum circuits and metadata.
+                If None, defaults to ".quantum_solver_cache".
             encoding (Optional[str]): Encoding strategy name for quantum representation
                 of Sudoku constraints (e.g., "graph", "vertex"). If None, uses default
                 encoding from base class.
@@ -66,14 +66,14 @@ class GraphColoringQuantumSolver(QuantumSolver):
 
                 solver = GraphColoringQuantumSolver(
                     puzzle=my_puzzle,
-                    metadata_manager=my_metadata_mgr,
+                    cache_base=cache_dir,
                     encoding="graph",
                     store_transpiled=True
                 )
         """
         super().__init__(
             puzzle=puzzle, 
-            metadata_manager=metadata_manager, 
+            cache_base=cache_base, 
             encoding=encoding, 
             store_transpiled=store_transpiled,
             **kwargs

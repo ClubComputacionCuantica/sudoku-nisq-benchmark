@@ -18,7 +18,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
     Symposium (APWCS), Tainan city, Taiwan, 2023.
     """
     
-    def __init__(self, puzzle=None, metadata_manager=None, encoding: Literal["simple", "pattern"] = "simple",
+    def __init__(self, puzzle=None, cache_base=None, encoding: Literal["simple", "pattern"] = "simple",
                  num_solutions=None, universe=None, subsets=None, 
                  exact_cover_problem: Optional[ExactCoverProblem] = None, **kwargs):
         """
@@ -31,7 +31,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
         
         Args:
             puzzle: SudokuPuzzle instance (for Sudoku mode)
-            metadata_manager: MetadataManager for caching
+            cache_base: Cache directory path
             encoding: Encoding type for Sudoku ("simple" or "pattern")
             num_solutions: Expected number of solutions
             universe: Direct universe list (for generic/direct mode)
@@ -59,7 +59,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
             # We still initialize parent but with puzzle=None
             super().__init__(
                 puzzle=None,
-                metadata_manager=metadata_manager,
+                cache_base=cache_base,
                 encoding=encoding,
                 **kwargs
             )
@@ -78,7 +78,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
             
             super().__init__(
                 puzzle=None,
-                metadata_manager=metadata_manager,
+                cache_base=cache_base,
                 encoding=encoding,
                 **kwargs
             )
@@ -90,7 +90,7 @@ class ExactCoverQuantumSolver(QuantumSolver):
             # Initialize the base class with puzzle
             super().__init__(
                 puzzle=puzzle,
-                metadata_manager=metadata_manager,
+                cache_base=cache_base,
                 encoding=encoding,
                 **kwargs
             )
@@ -268,7 +268,21 @@ class ExactCoverQuantumSolver(QuantumSolver):
             
         Returns:
             Circuit: Transpiled circuit in PyTKET format
+            
+        Raises:
+            TypeError: If main_circuit is not a PyTKET Circuit
+            RuntimeError: If transpilation fails
         """
+        from pytket.circuit import Circuit
+        
+        # Type validation: ensure circuit is PyTKET format
+        if not isinstance(self.main_circuit, Circuit):
+            raise TypeError(
+                f"PyTKET transpilation requires a pytket.circuit.Circuit, "
+                f"but main_circuit is {type(self.main_circuit).__name__}. "
+                f"Rebuild the circuit with sdk='pytket' or let run() auto-detect from backend."
+            )
+        
         try:
             tcirc = backend.get_compiled_circuit(
                 self.main_circuit,
@@ -301,12 +315,14 @@ class ExactCoverQuantumSolver(QuantumSolver):
         """
         from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
         from qiskit.compiler import transpile
+        from qiskit.circuit import QuantumCircuit
         
-        # Ensure main circuit is in Qiskit format
-        if not hasattr(self.main_circuit, 'qubits'):
+        # Type validation: ensure circuit is Qiskit format
+        if not isinstance(self.main_circuit, QuantumCircuit):
             raise TypeError(
-                f"Main circuit must be a Qiskit QuantumCircuit for Qiskit transpilation. "
-                f"Got {type(self.main_circuit)}. Rebuild circuit with sdk='qiskit'."
+                f"Qiskit transpilation requires a qiskit.circuit.QuantumCircuit, "
+                f"but main_circuit is {type(self.main_circuit).__module__}.{type(self.main_circuit).__name__}. "
+                f"Rebuild the circuit with sdk='qiskit' or let run() auto-detect from backend."
             )
         
         try:
@@ -513,38 +529,6 @@ class ExactCoverQuantumSolver(QuantumSolver):
             from sudoku_nisq.metrics import shots_for_target_success
             s99 = shots_for_target_success(out.get('success_rate'), target=0.99)
             out['shots_for_99pct'] = s99
-        except Exception:
-            pass
-        # Persist execution metrics to metadata if manager is available
-        try:
-            if hasattr(self, 'metadata_manager') and self.metadata_manager is not None:
-                metrics_to_store = {
-                    'success_rate': out.get('success_rate'),
-                    'topk_solution_mass': out.get('topk_solution_mass'),
-                    'precision_at_k': out.get('precision_at_k'),
-                    'recall_at_k': out.get('recall_at_k'),
-                    'distinct_solutions_observed': out.get('distinct_solutions_observed'),
-                    'snr': out.get('snr'),
-                    'eta': out.get('eta'),
-                    'eta2': out.get('eta2'),
-                    'G_total': out.get('G_total'),
-                    'G_2q': out.get('G_2q'),
-                    'depth': out.get('depth'),
-                    'shots_for_99pct': out.get('shots_for_99pct'),
-                    'ci_95_low': out.get('ci_95_low'),
-                    'ci_95_high': out.get('ci_95_high'),
-                    'shots': out.get('shots'),
-                }
-                # Attempt to derive backend alias and opt level from recent run context
-                backend_alias = getattr(self, 'last_backend_alias', 'unknown')
-                opt_level = getattr(self, 'last_opt_level', 0)
-                self.metadata_manager.record_execution_metrics(
-                    solver_name=self.__class__.__name__,
-                    encoding=getattr(self, 'encoding', 'default'),
-                    backend_alias=backend_alias,
-                    opt_level=opt_level,
-                    metrics=metrics_to_store,
-                )
         except Exception:
             pass
         return out

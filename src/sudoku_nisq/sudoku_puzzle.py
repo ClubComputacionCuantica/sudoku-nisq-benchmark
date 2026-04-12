@@ -345,6 +345,64 @@ class SudokuPuzzle:
                 count += self._count_solutions()
             self._set_cell(i, j, 0)  # Backtrack
         return count
+    
+    def enumerate_solutions(self, max_solutions: int = 100) -> list[list[list[int]]]:
+        """Enumerates all valid complete solutions using backtracking.
+        
+        Similar to _count_solutions but collects actual solution boards instead
+        of just counting. Includes a configurable limit to prevent excessive
+        computation for puzzles with many solutions.
+        
+        Args:
+            max_solutions: Maximum number of solutions to collect. Stops early
+                if this limit is reached. Default 100 is reasonable for 2×2 and
+                4×4 puzzles. For 9×9+ puzzles, enumeration may be infeasible.
+        
+        Returns:
+            List of solution boards, where each board is a 2D list of integers.
+            Returns empty list if puzzle is unsolvable. May return fewer than
+            max_solutions if puzzle has fewer valid solutions.
+        
+        Example:
+            >>> puzzle = SudokuPuzzle.from_board([[1, 0], [0, 1]])
+            >>> solutions = puzzle.enumerate_solutions(max_solutions=10)
+            >>> len(solutions)
+            2  # 2×2 puzzle with 2 givens typically has 2 solutions
+        
+        Note:
+            For large puzzles (9×9+) or puzzles with few clues, enumeration
+            can be computationally expensive. Consider using count_solutions
+            first to check feasibility.
+        """
+        from typing import List as ListType
+        solutions: ListType[ListType[ListType[int]]] = []
+        
+        def _enumerate_recursive():
+            """Helper function for recursive backtracking with solution collection."""
+            if len(solutions) >= max_solutions:
+                return  # Early stopping
+            
+            empty = self._find_empty()
+            if not empty:
+                # Check if the complete board is actually a valid solution
+                if self._is_correct():
+                    # Deep copy the current board state
+                    solution = [row[:] for row in self.board]
+                    solutions.append(solution)
+                return
+            
+            i, j = empty
+            for num in range(1, self.board_size + 1):
+                self._set_cell(i, j, num)
+                if self._is_correct():
+                    _enumerate_recursive()
+                    if len(solutions) >= max_solutions:
+                        self._set_cell(i, j, 0)
+                        return  # Early stopping
+                self._set_cell(i, j, 0)  # Backtrack
+        
+        _enumerate_recursive()
+        return solutions
     # ------------------------------------------------------------
     
     @staticmethod
@@ -386,3 +444,111 @@ class SudokuPuzzle:
             canonical.append(new_row)
 
         return canonical
+    
+    def create_validation_context(
+        self,
+        encoding_type: str = 'simple',
+        max_solutions: int = 100
+    ):
+        """Create a ValidationContext for metrics computation from solution enumeration.
+        
+        Enumerates valid solutions, converts them to bitstrings, and packages them
+        into a ValidationContext suitable for automatic metrics computation during
+        quantum execution.
+        
+        Args:
+            encoding_type: Either 'simple' or 'pattern' to specify which encoding
+                to use for bitstring conversion. Must match the encoding used when
+                building the quantum circuit. Default 'simple'.
+            max_solutions: Maximum number of solutions to enumerate. Default 100
+                is reasonable for 2×2 and small 4×4 puzzles. For 9×9+ puzzles,
+                enumeration is typically infeasible.
+        
+        Returns:
+            ValidationContext dataclass with:
+            - valid_solutions: List of bitstrings (one per valid solution)
+            - total_valid_count: Number of valid solutions found (may be capped)
+            - solution_validator: Function to check if a bitstring is valid
+        
+        Raises:
+            ValueError: If encoding_type is invalid or if puzzle has too many
+                solutions to enumerate (exceeds max_solutions limit).
+        
+        Example:
+            >>> from sudoku_nisq import QSudoku
+            >>> puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=2)
+            >>> context = puzzle.puzzle.create_validation_context('simple')
+            >>> len(context.valid_solutions)
+            2  # Example: 2×2 puzzle with 2 solutions
+            >>> puzzle.set_validation_context(context.valid_solutions)
+            >>> result = puzzle.run_aer(shots=1024)  # Auto-computes metrics
+        
+        Warning:
+            For puzzles with many empty cells or large board sizes, solution
+            enumeration can be computationally expensive. Check num_solutions
+            property first for feasibility. Generally:
+            - 2×2 puzzles: Always feasible (<10 solutions typically)
+            - 4×4 puzzles: Often feasible if well-constrained
+            - 9×9+ puzzles: Usually infeasible (billions of solutions)
+        
+        Note:
+            Results are cached in _cached_validation_context attribute to avoid
+            redundant computation. Pass force_recompute=True to clear cache (future).
+        """
+        from sudoku_nisq.metrics.data_models import ValidationContext
+        from sudoku_nisq.encodings.exact_cover_encoding import ExactCoverEncoding
+        
+        if encoding_type not in ('simple', 'pattern'):
+            raise ValueError(f"encoding_type must be 'simple' or 'pattern', got {encoding_type}")
+        
+        # Warn for potentially large solution spaces
+        if self.board_size >= 9 and self.num_missing_cells > 30:
+            import warnings
+            warnings.warn(
+                f"Puzzle has {self.num_missing_cells} empty cells on {self.board_size}×{self.board_size} board. "
+                f"Solution enumeration may be slow or infeasible. Consider using count_solutions first.",
+                UserWarning
+            )
+        
+        # Enumerate solutions
+        solution_boards = self.enumerate_solutions(max_solutions=max_solutions)
+        
+        if not solution_boards:
+            raise ValueError("Puzzle has no valid solutions. Cannot create ValidationContext.")
+        
+        # Convert solutions to bitstrings using exact cover encoding
+        encoder = ExactCoverEncoding(self)
+        valid_bitstrings = []
+        
+        for solution_board in solution_boards:
+            try:
+                bitstring = encoder.solution_to_bitstring(solution_board, encoding_type)
+                valid_bitstrings.append(bitstring)
+            except Exception as e:
+                import warnings
+                warnings.warn(
+                    f"Failed to convert solution to bitstring: {e}. Skipping this solution.",
+                    UserWarning
+                )
+        
+        if not valid_bitstrings:
+            raise ValueError("Could not convert any solutions to bitstrings. Check encoding configuration.")
+        
+        # Create validator function
+        valid_set = set(valid_bitstrings)
+        def validator(bitstring: str) -> bool:
+            return bitstring in valid_set
+        
+        # Create and return ValidationContext
+        context = ValidationContext(
+            valid_solutions=valid_bitstrings,
+            total_valid_count=len(valid_bitstrings),
+            solution_validator=validator
+        )
+        
+        # Cache for future use
+        if not hasattr(self, '_cached_validation_contexts'):
+            self._cached_validation_contexts = {}
+        self._cached_validation_contexts[encoding_type] = context
+        
+        return context

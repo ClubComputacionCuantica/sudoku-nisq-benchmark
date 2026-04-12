@@ -14,18 +14,18 @@ class MemoryTracker:
     Uses psutil for cross-platform memory monitoring with minimal overhead.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize memory tracker."""
         self.process = psutil.Process(os.getpid())
         self.snapshots: Dict[str, float] = {}
         self.initial_memory: Optional[float] = None
         
-    def start(self):
+    def start(self) -> None:
         """Record initial memory usage."""
         self.initial_memory = self._get_memory_mb()
         self.snapshots['initial'] = self.initial_memory
         
-    def snapshot(self, label: str):
+    def snapshot(self, label: str) -> None:
         """Record memory usage at a specific point.
         
         Args:

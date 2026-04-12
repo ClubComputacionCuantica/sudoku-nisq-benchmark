@@ -502,6 +502,93 @@ class ExactCoverProblem:
 
         return backtrack(remaining)
     
+    def enumerate_solutions(self, max_solutions: int = 100) -> list[list[str]]:
+        """Enumerate exact cover solutions using backtracking.
+        
+        Collects actual solution subset keys instead of just counting. Each solution
+        is a list of subset keys whose elements partition the universe exactly once.
+        
+        Args:
+            max_solutions: Maximum number of solutions to collect. Default 100 is
+                reasonable for small exact cover problems. Larger problems may have
+                exponentially many solutions.
+        
+        Returns:
+            List of solutions, where each solution is a list of subset keys (strings).
+            Returns empty list if no exact covers exist. May return fewer than
+            max_solutions if problem has fewer valid solutions.
+        
+        Example:
+            >>> problem = ExactCoverProblem.create_small_example()
+            >>> solutions = problem.enumerate_solutions(max_solutions=10)
+            >>> len(solutions)
+            1  # Small example has 1 exact cover
+            >>> solutions[0]
+            ['S_0', 'S_2']  # These subsets partition the universe exactly
+        
+        Note:
+            For large exact cover problems, enumeration can be computationally
+            expensive. Consider using count_solutions() first to check feasibility.
+        """
+        solutions: List[List[str]] = []
+        
+        # Map each element to the subset keys that contain it
+        elem_to_subsets: Dict[Any, List[str]] = {}
+        for key, elems in self.subsets.items():
+            for e in elems:
+                elem_to_subsets.setdefault(e, []).append(key)
+        
+        # Precompute subset contents as sets for fast intersection/subset checks
+        subset_elems: Dict[str, Set[Any]] = {
+            key: set(elems) for key, elems in self.subsets.items()
+        }
+        
+        remaining = set(self.universe)
+        
+        def backtrack(rem: Set[Any], chosen: List[str]) -> None:
+            """Recursive backtracking that collects solutions."""
+            if len(solutions) >= max_solutions:
+                return  # Early stopping
+            
+            # All elements covered → found an exact cover
+            if not rem:
+                solutions.append(chosen[:])  # Copy the current solution
+                return
+            
+            # Choose an element with the smallest branching factor
+            best_candidates: Optional[List[str]] = None
+            
+            for e in rem:
+                # Subsets that contain e and don't use elements outside rem
+                candidates = [
+                    key for key in elem_to_subsets.get(e, [])
+                    if subset_elems[key] <= rem
+                ]
+                
+                # If no subset can cover this element, dead end
+                if not candidates:
+                    return
+                
+                if best_candidates is None or len(candidates) < len(best_candidates):
+                    best_candidates = candidates
+                    if len(best_candidates) == 1:
+                        break  # Can't do better than 1
+            
+            assert best_candidates is not None  # For type checkers
+            
+            # Try each subset that covers best_elem
+            for key in best_candidates:
+                if len(solutions) >= max_solutions:
+                    return  # Early stopping
+                
+                new_rem = rem - subset_elems[key]
+                chosen.append(key)
+                backtrack(new_rem, chosen)
+                chosen.pop()  # Backtrack
+        
+        backtrack(remaining, [])
+        return solutions
+    
     @staticmethod
     def create_small_example() -> 'ExactCoverProblem':
         """Return a 4-element toy instance with one exact cover solution."""
@@ -520,3 +607,68 @@ class ExactCoverProblem:
             num_solutions=1,
             metadata={'description': 'Small example with 1 solution'}
         )
+    
+    def create_validation_context(self, max_solutions: int = 100):
+        """Create a ValidationContext for metrics computation from solution enumeration.
+        
+        Enumerates exact cover solutions and packages them into a ValidationContext
+        suitable for automatic metrics computation during quantum execution.
+        
+        Args:
+            max_solutions: Maximum number of solutions to enumerate. Default 100.
+        
+        Returns:
+            ValidationContext dataclass with:
+            - valid_solutions: List of bitstrings (one per exact cover solution)
+            - total_valid_count: Number of valid solutions found (may be capped)
+            - solution_validator: Function to check if a bitstring is valid
+        
+        Raises:
+            ValueError: If problem has no exact covers.
+        
+        Example:
+            >>> problem = ExactCoverProblem.create_small_example()
+            >>> context = problem.create_validation_context()
+            >>> len(context.valid_solutions)
+            1  # Small example has 1 exact cover
+        
+        Note:
+            For exact cover problems, bitstrings are constructed by checking
+            which subsets appear in each solution.
+        """
+        from sudoku_nisq.metrics.data_models import ValidationContext
+        
+        # Enumerate solutions
+        solutions = self.enumerate_solutions(max_solutions=max_solutions)
+        
+        if not solutions:
+            raise ValueError("Problem has no exact covers. Cannot create ValidationContext.")
+        
+        # Convert solutions to bitstrings
+        # Each solution is a list of subset keys
+        # Bitstring has '1' at position i if subset S_i is selected
+        subset_keys = sorted(self.subsets.keys())  # Consistent ordering
+        key_to_index = {key: idx for idx, key in enumerate(subset_keys)}
+        n_subsets = len(subset_keys)
+        
+        valid_bitstrings = []
+        for solution in solutions:
+            bitstring = ['0'] * n_subsets
+            for key in solution:
+                if key in key_to_index:
+                    bitstring[key_to_index[key]] = '1'
+            valid_bitstrings.append(''.join(bitstring))
+        
+        # Create validator function
+        valid_set = set(valid_bitstrings)
+        def validator(bitstring: str) -> bool:
+            return bitstring in valid_set
+        
+        # Create and return ValidationContext
+        context = ValidationContext(
+            valid_solutions=valid_bitstrings,
+            total_valid_count=len(valid_bitstrings),
+            solution_validator=validator
+        )
+        
+        return context

@@ -64,5 +64,5 @@ _ = p.transpile(alias, opt_level=2)
 
 summary = p.report_resources()
 ec = summary["solvers"]["ExactCoverQuantumSolver"]["simple"]["backends"][alias]
-print("opt0 n_gates:", ec[0]["n_gates"], "opt2 n_gates:", ec[2]["n_gates"])  # keys are ints
+print("opt0 n_gates:", ec["0"]["n_gates"], "opt2 n_gates:", ec["2"]["n_gates"])  # keys are strings
 ```

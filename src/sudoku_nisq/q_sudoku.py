@@ -4,7 +4,6 @@ from typing import List, Dict, Any, Optional, Type, TYPE_CHECKING
 from pathlib import Path
 
 from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
-from sudoku_nisq.metadata_manager import MetadataManager
 from sudoku_nisq.backends import BackendManager
 
 if TYPE_CHECKING:
@@ -33,7 +32,7 @@ class QSudoku():
         puzzle (SudokuPuzzle): The underlying Sudoku puzzle instance.
         _solver (Optional[QuantumSolver]): Currently active quantum solver instance.
         _attached_backends (Dict[str, Any]): Dictionary of attached quantum backends by alias.
-        _metadata (MetadataManager): Manager for caching circuits and performance metadata.
+        cache_base (Path): Base directory for caching circuits and metadata.
         
     Example:
         .. code-block:: python
@@ -83,12 +82,10 @@ class QSudoku():
         # Initialize solver management
         self._solver: Optional["QuantumSolver"] = None
         self._attached_backends: Dict[str, Any] = {}
+        self._validation_context: Optional[Any] = None
         
-        # Metadata manager for caching and logging
-        self._metadata = MetadataManager(
-            cache_base=Path(cache_base) if cache_base else Path(".quantum_solver_cache"),
-            puzzle_hash=self.puzzle.get_hash()
-        )
+        # Cache base for stage managers
+        self.cache_base = Path(cache_base) if cache_base else Path(".quantum_solver_cache")
     
     @classmethod
     def generate(
@@ -258,6 +255,24 @@ class QSudoku():
                 This affects quantum algorithm complexity and resource requirements.
         """
         return self.puzzle.num_missing_cells
+
+    @property
+    def quantum_solver(self) -> Optional["QuantumSolver"]:
+        """Get the currently active quantum solver instance.
+        
+        Returns:
+            Optional[QuantumSolver]: The active solver, or None if no solver is set.
+                Used by BenchmarkSession to access solver configuration and resources.
+        
+        Example:
+            .. code-block:: python
+
+                puzzle = QSudoku.generate(size=2)
+                puzzle.set_solver(ExactCoverQuantumSolver)
+                solver = puzzle.quantum_solver
+                print(solver.solver_name, solver.encoding)
+        """
+        return self._solver
 
     def plot_puzzle(self) -> None:
         """Plot the current Sudoku board using matplotlib visualization.
@@ -623,23 +638,13 @@ class QSudoku():
         # Create new solver
         new_solver = solver_class(
             puzzle=self.puzzle,
-            metadata_manager=self._metadata,
+            cache_base=self.cache_base,
             encoding=encoding,
             **solver_kwargs
         )
         
         # Swap in new solver (cleanup handled internally)
         self._swap_solver(new_solver)
-        
-        # Record puzzle metadata once per solver
-        self._metadata.ensure_puzzle_fields(
-            size=self.board_size,
-            num_missing_cells=self.num_missing_cells,
-            board=self.board
-        )
-        
-        # Flush metadata to disk immediately
-        self._metadata.save()
         
         return self._solver
     
@@ -670,6 +675,79 @@ class QSudoku():
             del self._solver
             self._solver = None
             gc.collect()
+    
+    def set_validation_context(self, valid_solutions: List[str]) -> None:
+        """Configure validation context for automatic metrics computation.
+        
+        Sets up the validation context that enables automatic Stage 6-7 metrics
+        recording during quantum execution. When a validation context is provided,
+        the solver will automatically compute evaluation metrics (success probability,
+        fidelity, top-k statistics) and normalization metrics (gate efficiency,
+        circuit volume efficiency, shot efficiency) after each execution.
+        
+        Args:
+            valid_solutions (List[str]): List of valid solution bitstrings to check
+                against measurement outcomes. Each string should be a binary string
+                matching the quantum circuit's output format (e.g., "0110" for a
+                4-qubit measurement).
+                
+        Note:
+            The validation context persists across multiple run() and run_aer() calls
+            until explicitly cleared with clear_validation_context() or a new context
+            is set. Metrics are recorded automatically if the new metadata architecture
+            is enabled (MetadataConfig.ENABLE_NEW_ARCHITECTURE=True).
+            
+        Example:
+            .. code-block:: python
+
+                from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
+                
+                puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=2)
+                puzzle.set_solver(ExactCoverQuantumSolver, encoding="simple")
+                
+                # Get known valid solutions (from classical solver or manual entry)
+                valid_solutions = ["0110", "1001"]  # Example bitstrings
+                puzzle.set_validation_context(valid_solutions)
+                
+                # Run with automatic metrics recording
+                result = puzzle.run_aer(shots=1024)
+                
+                # Metrics are automatically recorded to Stage 6-7 JSON files
+                # Query them via MetricsMetadataManager if needed
+        """
+        from sudoku_nisq.metrics.data_models import ValidationContext
+        
+        # Create validator function
+        valid_solutions_set = set(valid_solutions)
+        
+        def solution_validator(bitstring: str) -> bool:
+            return bitstring in valid_solutions_set
+        
+        self._validation_context = ValidationContext(
+            valid_solutions=list(valid_solutions),
+            total_valid_count=len(valid_solutions),
+            solution_validator=solution_validator
+        )
+    
+    def clear_validation_context(self) -> None:
+        """Remove the validation context to disable automatic metrics computation.
+        
+        Clears the current validation context, which disables automatic Stage 6-7
+        metrics recording during quantum execution. Execution will continue normally
+        but only Stage 5 execution metadata will be recorded.
+        
+        Example:
+            .. code-block:: python
+
+                # Set up validation for benchmarking
+                puzzle.set_validation_context(["0110", "1001"])
+                result1 = puzzle.run_aer(shots=1024)  # Metrics recorded
+                
+                # Disable metrics for quick testing
+                puzzle.clear_validation_context()
+                result2 = puzzle.run_aer(shots=256)  # Only execution data recorded
+        """
+        self._validation_context = None
     
     def _swap_solver(self, new_solver: "QuantumSolver") -> None:
         """Internal method to safely replace the current solver with cleanup.
@@ -1005,7 +1083,15 @@ class QSudoku():
                     f"Global: {available_global}, Attached: {available_attached}"
                 ) from e
             
-        return self._solver.run(backend, backend_alias, shots, force_run=False, optimisation_level=opt_level, **kwargs)
+        return self._solver.run(
+            backend,
+            backend_alias,
+            shots,
+            force_run=False,
+            optimisation_level=opt_level,
+            validation_context=self._validation_context,
+            **kwargs
+        )
     
     def run_aer(self, shots: int = 1024, **kwargs):
         """Execute the quantum circuit on the local Aer simulator.
@@ -1043,7 +1129,7 @@ class QSudoku():
         """
         if not self._solver:
             raise ValueError("No solver set. Call set_solver() first.")
-        return self._solver.run_aer(shots, **kwargs)
+        return self._solver.run_aer(shots, validation_context=self._validation_context, **kwargs)
 
     def format_result(self, result):
         """Decode and format a backend result using the active solver.
@@ -1106,7 +1192,7 @@ class QSudoku():
     def report_resources(self):
         """Return structured summary of all recorded resource data.
 
-        The summary is derived from the metadata manager and includes puzzle
+        The summary queries the stage-aware metadata system and includes puzzle
         info plus per-solver, per-encoding circuit metrics and backend-specific
         transpilation results. Depth values may be ``None`` when a solver's
         analytical estimation does not compute it (e.g. exact-cover estimation).
@@ -1151,7 +1237,7 @@ class QSudoku():
                 mc = resources["solvers"]["ExactCoverQuantumSolver"]["simple"]["main_circuit"]
                 print(mc.get("n_qubits"), mc.get("depth"))   # Depth may be None
         """
-        return self._metadata.get_resource_summary()
+        return self._get_resource_summary_from_stages()
 
     def get_hash(self) -> str:
         """Get the unique hash identifier for the Sudoku puzzle.
@@ -1169,3 +1255,233 @@ class QSudoku():
                 puzzle_hash = puzzle.get_hash()
         """
         return self.puzzle.get_hash()
+    
+    def calculate_metrics(self, run_id = None):
+        """Calculate or retrieve benchmarking metrics for a quantum execution.
+        
+        Provides programmatic access to comprehensive benchmarking metrics including
+        success probability, ranking metrics, efficiency metrics, and more. Can
+        either compute metrics for a fresh result or load previously computed
+        metrics from Stage 6-7 JSON files.
+        
+        Args:
+            run_id: Optional UUID of a specific execution run. If provided, loads
+                metrics from Stage 6-7 JSON files. If None, returns metrics from
+                the most recent run (if Stage 6-7 recording was enabled).
+        
+        Returns:
+            MetricsResult dataclass or dict containing all computed metrics, or None if
+            no metrics are available (e.g., validation context wasn't set).
+        
+        Raises:
+            ValueError: If new metadata architecture is not enabled, or if
+                requested run_id doesn't exist.
+        
+        Example:
+            >>> from sudoku_nisq import QSudoku
+            >>> from sudoku_nisq.solvers import ExactCoverQuantumSolver
+            >>> 
+            >>> # Generate puzzle and set up solver
+            >>> puzzle = QSudoku.generate(subgrid_size=2, num_missing_cells=2)
+            >>> puzzle.set_solver(ExactCoverQuantumSolver, encoding='simple')
+            >>> puzzle.build_circuit()
+            >>> 
+            >>> # Enable automatic metrics with validation context
+            >>> context = puzzle.puzzle.create_validation_context('simple')
+            >>> puzzle.set_validation_context(context.valid_solutions)
+            >>> 
+            >>> # Run and compute metrics
+            >>> result = puzzle.run_aer(shots=1024)
+            >>> metrics = puzzle.calculate_metrics()
+            >>> 
+            >>> # Access metrics
+            >>> print(f"Success probability: {metrics['p_succ']:.4f}")
+            >>> print(f"Valid odds: {metrics.get('valid_odds', 'N/A')}")
+        
+        Note:
+            Requires `SUDOKU_NISQ_NEW_METADATA=1` environment variable or
+            `MetadataConfig.ENABLE_NEW_ARCHITECTURE=True` to enable Stage 6-7
+            recording. Also requires a validation context to be set before execution.
+        
+        See Also:
+            - set_validation_context(): Enable automatic metrics recording
+            - create_validation_context(): Generate validation context from enumeration
+        """
+        from sudoku_nisq.metadata.metrics import MetricsMetadataManager
+        from sudoku_nisq.metadata.config import MetadataConfig
+        
+        if not MetadataConfig.ENABLE_NEW_ARCHITECTURE:
+            raise ValueError(
+                "Metrics calculation requires new metadata architecture. "
+                "Set SUDOKU_NISQ_NEW_METADATA=1 or MetadataConfig.ENABLE_NEW_ARCHITECTURE=True"
+            )
+        
+        # Initialize metrics manager
+        puzzle_hash = self.get_hash()
+        metrics_manager = MetricsMetadataManager(
+            cache_base=".quantum_solver_cache",
+            puzzle_hash=puzzle_hash
+        )
+        
+        # Query metrics
+        if run_id is not None:
+            # Load specific run
+            all_metrics = metrics_manager.query()
+            if run_id not in all_metrics:
+                raise ValueError(f"No metrics found for run_id: {run_id}")
+            return all_metrics[run_id]
+        else:
+            # Get most recent run
+            all_metrics = metrics_manager.query()
+            if not all_metrics:
+                return None  # No metrics available
+            
+            # Find most recent non-aggregated entry
+            from datetime import datetime
+            recent_run_id = None
+            recent_timestamp = None
+            
+            for rid, data in all_metrics.items():
+                if rid.startswith("aggregated_"):
+                    continue  # Skip aggregated entries
+                
+                # Try to extract timestamp from data
+                timestamp_str = data.get("timestamp")
+                if timestamp_str:
+                    try:
+                        ts = datetime.fromisoformat(timestamp_str)
+                        if recent_timestamp is None or ts > recent_timestamp:
+                            recent_timestamp = ts
+                            recent_run_id = rid
+                    except (ValueError, TypeError):
+                        pass
+            
+            if recent_run_id is None:
+                return None
+            
+            return all_metrics[recent_run_id]    
+    def _get_resource_summary_from_stages(self) -> Dict[str, Any]:
+        """Query stage managers to build resource summary.
+        
+        Returns:
+            dict: Resource summary in legacy format for backward compatibility
+        """
+        from sudoku_nisq.metadata import LogicalIRMetadataManager, CompilationMetadataManager
+        
+        puzzle_hash = self.puzzle.get_hash()
+        
+        # Build puzzle info
+        puzzle_size = getattr(self.puzzle, 'size', None) or getattr(self.puzzle, 'board_size', 0)
+        summary = {
+            "puzzle_info": {
+                "hash": puzzle_hash,
+                "size": puzzle_size,
+                "num_missing_cells": len(self.puzzle.open_tuples)
+            },
+            "solvers": {}
+        }
+        
+        # Query Stage 2a for logical IR data
+        try:
+            stage2a = LogicalIRMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=puzzle_hash
+            )
+            
+            ir_records = stage2a.query()
+            
+            # Handle both list and None return types
+            if ir_records is None:
+                ir_records = []
+            elif not isinstance(ir_records, list):
+                ir_records = [ir_records]
+            
+            # Group by solver/encoding
+            for record in ir_records:
+                solver_name = record.get('solver_name')
+                encoding = record.get('encoding')
+                resources = record.get('resources', {})
+                
+                if isinstance(solver_name, str) and solver_name:
+                    solvers_dict = summary.get("solvers")
+                    if not isinstance(solvers_dict, dict):
+                        solvers_dict = {}
+                        summary["solvers"] = solvers_dict
+                    
+                    if solver_name not in solvers_dict:
+                        solvers_dict[solver_name] = {}
+                    
+                    if isinstance(encoding, str) and encoding:
+                        solver_entry = solvers_dict.get(solver_name)
+                        if isinstance(solver_entry, dict) and encoding not in solver_entry:
+                            solver_entry[encoding] = {
+                                "main_circuit": resources,
+                                "backends": {}
+                            }
+        except Exception:
+            pass
+        
+        # Query Stage 3 for compilation data
+        try:
+            stage3 = CompilationMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=puzzle_hash
+            )
+            
+            comp_records_result = stage3.query()
+            
+            # Handle both list and None return types
+            comp_records = []
+            if comp_records_result is None:
+                comp_records = []
+            elif not isinstance(comp_records_result, list):
+                comp_records = [comp_records_result]
+            else:
+                comp_records = comp_records_result
+            
+            # Match compilations to solvers via circuit_hash
+            circuit_hash_to_solver = {}
+            if ir_records:
+                for record in ir_records:
+                    circuit_hash = record.get('circuit_hash')
+                    solver_name = record.get('solver_name')
+                    encoding = record.get('encoding')
+                    if circuit_hash and solver_name and encoding:
+                        circuit_hash_to_solver[circuit_hash] = (solver_name, encoding)
+            
+            for comp in comp_records:
+                circuit_hash = comp.get('circuit_hash')
+                if circuit_hash and circuit_hash in circuit_hash_to_solver:
+                    solver_name, encoding = circuit_hash_to_solver[circuit_hash]
+                    backend_alias = comp.get('backend_alias')
+                    opt_level = comp.get('opt_level')
+                    resources = comp.get('resources', {})
+                    
+                    # Type-safe nested dict access
+                    if (isinstance(solver_name, str) and solver_name and 
+                        isinstance(encoding, str) and encoding):
+                        solvers_dict = summary.get("solvers")
+                        if not isinstance(solvers_dict, dict):
+                            continue
+                        
+                        solver_entry = solvers_dict.get(solver_name)
+                        if not isinstance(solver_entry, dict):
+                            continue
+                        
+                        encoding_entry = solver_entry.get(encoding)
+                        if not isinstance(encoding_entry, dict):
+                            continue
+                        
+                        backends_entry = encoding_entry.get("backends")
+                        if not isinstance(backends_entry, dict):
+                            continue
+                        
+                        if isinstance(backend_alias, str) and backend_alias:
+                            if backend_alias not in backends_entry:
+                                backends_entry[backend_alias] = {}
+                            if isinstance(opt_level, int):
+                                backends_entry[backend_alias][str(opt_level)] = resources
+        except Exception:
+            pass
+        
+        return summary

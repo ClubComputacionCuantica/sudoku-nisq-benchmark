@@ -6,6 +6,8 @@ from sudoku_nisq.mitigation.expectation_wrapper import (
     compute_bitstring_expectation
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestExpectationWrapper:
     """Test expectation value computation from measurement counts."""

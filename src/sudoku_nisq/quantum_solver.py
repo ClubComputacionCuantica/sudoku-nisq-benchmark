@@ -1,15 +1,24 @@
 # mypy: ignore-errors
 import json
+import time
 from pathlib import Path
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 from pytket import Circuit, OpType
 from pytket.utils import gate_counts
 from pytket.passes import FlattenRegisters
 from qiskit import QuantumCircuit
 
 from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
-from sudoku_nisq.metadata_manager import MetadataManager
+from sudoku_nisq.metadata.collectors import collect_hardware_metadata
+from sudoku_nisq.metadata.config import MetadataConfig
+from sudoku_nisq.metadata import (
+    LogicalIRMetadataManager,
+    IRPolicyMetadataManager,
+    CompilationMetadataManager,
+    ExecutionMetadataManager,
+    MetricsMetadataManager,
+)
 
 class QuantumSolver(ABC):
     """Abstract base class that provides infrastructure for quantum Sudoku solvers.
@@ -34,7 +43,7 @@ class QuantumSolver(ABC):
     def __init__(
         self, 
         puzzle: SudokuPuzzle | None = None,
-        metadata_manager: MetadataManager | None = None,
+        cache_base: Path | None = None,
         encoding: str | None = None, 
         store_transpiled: bool = True,
     ):
@@ -47,8 +56,8 @@ class QuantumSolver(ABC):
         Args:
             puzzle (SudokuPuzzle, optional): The Sudoku puzzle instance to solve. 
                 Can be None for generic exact cover problems.
-            metadata_manager (MetadataManager, optional): Instance for managing circuit metadata,
-                caching, and performance tracking. Can be None for minimal usage.
+            cache_base (Path, optional): Base directory for caching circuits and metadata.
+                Defaults to ".quantum_solver_cache" if not provided.
             encoding (str, optional): Encoding strategy name for the quantum algorithm.
                 If None, defaults to "default".
             store_transpiled (bool, optional): Whether to save transpiled circuits to
@@ -57,15 +66,14 @@ class QuantumSolver(ABC):
         
         # Sudoku integration for puzzle-specific caching (optional for generic problems)
         self.puzzle = puzzle
-        self._metadata = metadata_manager
         self.encoding = encoding or "default"  # Default encoding if not specified
         self.store_transpiled = store_transpiled
         
         # Circuit management - now SDK-agnostic
         self.main_circuit: Any | None = None
         
-        # Cache base derived from metadata manager (if provided)
-        self.cache_base = self._metadata.cache_base if self._metadata else Path(".quantum_solver_cache")
+        # Cache base for stage managers
+        self.cache_base = cache_base if cache_base else Path(".quantum_solver_cache")
         
     @abstractmethod
     def _build_sdk_circuit(self, sdk_type: str) -> Any:
@@ -252,14 +260,6 @@ class QuantumSolver(ABC):
         return getattr(self, 'memory_usage', None)
 
     @property
-    def metadata_path(self) -> Path:
-        """Path: File path to the puzzle's metadata JSON file.
-        
-        Format: .quantum_solver_cache/{puzzle_hash}/metadata.json
-        """
-        return self.cache_base / self.puzzle_hash / "metadata.json"
-
-    @property
     def cache_root(self) -> Path:
         """Path: Root directory for this solver's cached files.
         
@@ -274,6 +274,20 @@ class QuantumSolver(ABC):
         Format: .quantum_solver_cache/{puzzle_hash}/{solver_name}/{encoding}/main_circuit.json
         """
         return self.cache_root / "main_circuit.json"
+    
+    def _get_circuit_extension(self, sdk_type: str | None) -> str:
+        """Get the file extension for circuit cache based on SDK type.
+        
+        Args:
+            sdk_type (str | None): SDK type ("pytket", "qiskit", "braket").
+            
+        Returns:
+            str: File extension including dot (".qpy" for Qiskit, ".json" for others).
+        """
+        if sdk_type == "qiskit":
+            return ".qpy"  # Native Qiskit QPY format
+        else:
+            return ".json"  # PyTKET and Braket use JSON
     
     def transpiled_circuit_path(self, backend_alias: str, opt_level: int, sdk_type: str | None = None) -> Path:
         """Get the file path for a transpiled circuit cache.
@@ -290,12 +304,14 @@ class QuantumSolver(ABC):
         Returns:
             Path: File path for the transpiled circuit cache.
                 Format (with SDK): .quantum_solver_cache/{puzzle_hash}/{solver_name}/{encoding}/
-                        {backend_alias}/opt{opt_level}_{sdk_type}_circuit.json
+                        {backend_alias}/opt{opt_level}_{sdk_type}_circuit{.ext}
+                        where .ext is .qpy for Qiskit, .json for PyTKET/Braket
                 Format (without SDK): .quantum_solver_cache/{puzzle_hash}/{solver_name}/{encoding}/
                         {backend_alias}/opt{opt_level}_circuit.json
         """
         if sdk_type:
-            return self.cache_root / backend_alias / f"opt{opt_level}_{sdk_type}_circuit.json"
+            ext = self._get_circuit_extension(sdk_type)
+            return self.cache_root / backend_alias / f"opt{opt_level}_{sdk_type}_circuit{ext}"
         else:
             return self.cache_root / backend_alias / f"opt{opt_level}_circuit.json"
 
@@ -359,11 +375,14 @@ class QuantumSolver(ABC):
             # Record main circuit resources using available format
             main_res = self._get_circuit_resources(cache_circuit)
             
-            # Track SDK type in metadata (explicit selection or auto-detected)
-            self._metadata.set_main_circuit_resources(self.solver_name, self.encoding, main_res, sdk_type=target_sdk)
-            self._metadata.save()
+            # Record to Stage 2a (Logical IR)
+            self._record_logical_ir(circ, target_sdk, main_res)
+            
+            # Record IR policy (Stage 2b) at the end after circuit is built
+            self._record_ir_policy(target_sdk)
 
         self.main_circuit = circ
+        self._main_circuit_sdk = target_sdk  # Track SDK format for validation
         return circ
 
     def _detect_backend_sdk(self, backend: Any) -> str:
@@ -411,6 +430,26 @@ class QuantumSolver(ABC):
         else:
             # Default to pytket for unknown backends
             return "pytket"
+    
+    def _requires_runtime_primitives(self, backend: Any) -> bool:
+        """Detect if backend requires Qiskit Runtime primitives (SamplerV2).
+        
+        IBM Quantum hardware backends from qiskit_ibm_runtime require Runtime
+        primitives (Sampler/Estimator) as backend.run() is deprecated.
+        Local simulators (Aer) use legacy backend.run().
+        
+        Args:
+            backend: Backend instance to check
+            
+        Returns:
+            bool: True if backend requires Runtime primitives, False for legacy path
+        """
+        if backend is None:
+            return False
+        
+        # Check if backend comes from qiskit_ibm_runtime module
+        backend_module = getattr(backend, '__module__', '')
+        return backend_module.startswith('qiskit_ibm_runtime')
 
     def _ensure_pytket_format(self, circuit: Any, sdk_type: str | None = None, backend: Any = None) -> Circuit:
         """Convert circuit to pytket format for caching and metadata consistency.
@@ -650,22 +689,15 @@ class QuantumSolver(ABC):
             res = self._extract_transpiled_metrics(tcirc, sdk_type)
             res["sdk_type"] = sdk_type
 
-            # persist metadata
-            self._metadata.set_backend_resources(
-                self.solver_name, self.encoding,
-                backend_alias, opt_level, res
-            )
-            self._metadata.save()
+            # Record to Stage 3 (Compilation)
+            self._record_compilation(backend_alias, opt_level, res, tcirc, sdk_type)
             
             return res
 
         except Exception as e:
             err = {"error": str(e), "sdk_type": sdk_type}
-            self._metadata.set_backend_resources(
-                self.solver_name, self.encoding,
-                backend_alias, opt_level, err
-            )
-            self._metadata.save()
+            # Record error to Stage 3 as well
+            self._record_compilation(backend_alias, opt_level, err, None, sdk_type)
             
             return err
 
@@ -677,25 +709,142 @@ class QuantumSolver(ABC):
     ) -> Any:
         """Execute a Qiskit circuit on a native Qiskit backend.
         
-        This method handles execution for native qiskit_ibm_runtime backends
-        that use backend.run() instead of pytket's process_circuit().
+        Automatically detects whether to use Runtime primitives (IBM hardware)
+        or legacy backend.run() (simulators).
         
         Args:
-            backend: Native Qiskit runtime backend instance
+            backend: Native Qiskit backend instance
             circuit: Transpiled Qiskit QuantumCircuit
             shots: Number of measurement shots
             
         Returns:
             Job result object with counts and metadata
         """
-        # Native Qiskit execution uses backend.run()
+        if self._requires_runtime_primitives(backend):
+            return self._run_with_sampler(backend, circuit, shots)
+        else:
+            return self._run_legacy(backend, circuit, shots)
+    
+    def _run_with_sampler(
+        self,
+        backend: Any,
+        circuit: QuantumCircuit,
+        shots: int = 1024,
+    ) -> Any:
+        """Execute using Qiskit Runtime SamplerV2 primitive.
+        
+        IBM Quantum hardware requires Runtime primitives as backend.run() is
+        deprecated. Uses job mode (no session) for single job execution.
+        
+        Args:
+            backend: IBM Quantum backend from qiskit_ibm_runtime
+            circuit: Pre-transpiled ISA-compatible QuantumCircuit
+            shots: Number of measurement shots
+            
+        Returns:
+            Result object compatible with legacy path (normalized structure)
+            
+        Raises:
+            ImportError: If qiskit-ibm-runtime is not installed
+        """
+        try:
+            from qiskit_ibm_runtime import SamplerV2 as Sampler
+        except ImportError:
+            raise ImportError(
+                "qiskit-ibm-runtime is required for IBM Quantum hardware execution. "
+                "Install with: pip install qiskit-ibm-runtime"
+            )
+        
+        # Initialize Sampler in job mode (no session for single jobs)
+        sampler = Sampler(mode=backend)
+        
+        # Submit job with pre-transpiled circuit
+        job = sampler.run([circuit], shots=shots)
+        
+        # Wait for completion and get result
+        primitive_result = job.result()  # PrimitiveResult object
+        
+        # Extract counts from first PUB result
+        # Note: Our circuits use 'c' as classical register name
+        pub_result = primitive_result[0]
+        
+        # Try common register names (prioritize 'c' as that's what our circuits use)
+        counts_dict = None
+        for reg_name in ['c', 'meas', 'cr']:
+            try:
+                if hasattr(pub_result.data, reg_name):
+                    bit_array = getattr(pub_result.data, reg_name)
+                    counts_dict = bit_array.get_counts()  # Returns dict[str, int]
+                    break
+            except AttributeError:
+                continue
+        
+        if counts_dict is None:
+            # Fallback: try first available register
+            data_attrs = [attr for attr in dir(pub_result.data) if not attr.startswith('_')]
+            if data_attrs:
+                bit_array = getattr(pub_result.data, data_attrs[0])
+                counts_dict = bit_array.get_counts()
+            else:
+                raise RuntimeError("Could not extract counts from SamplerResult")
+        
+        # Create normalized result object compatible with legacy path
+        # This allows downstream code to work with both paths
+        class NormalizedResult:
+            """Result object that mimics legacy Result interface."""
+            def __init__(self, counts, job, primitive_result, circuit):
+                self._counts = counts
+                self._job = job
+                self._primitive_result = primitive_result
+                self.compiled_circuit = circuit
+                
+                # Extract metadata
+                try:
+                    metrics = job.metrics()
+                    timestamps = metrics.get('timestamps', {})
+                    self.execution_time = timestamps.get('finished', 0) - timestamps.get('started', 0)
+                except Exception:
+                    self.execution_time = None
+                
+                self.job_id = job.job_id()
+                self.success = job.status() == 'DONE'
+                
+                # Store job for hardware metadata extraction (Stage 5)
+                self.runtime_job = job
+                self.primitive_result = primitive_result
+            
+            def get_counts(self):
+                """Return counts dict (legacy interface compatibility)."""
+                return self._counts
+        
+        return NormalizedResult(counts_dict, job, primitive_result, circuit)
+    
+    def _run_legacy(
+        self,
+        backend: Any,
+        circuit: QuantumCircuit,
+        shots: int = 1024,
+    ) -> Any:
+        """Execute using legacy backend.run() (simulators, older providers).
+        
+        Args:
+            backend: Qiskit backend with run() method
+            circuit: Transpiled QuantumCircuit
+            shots: Number of measurement shots
+            
+        Returns:
+            Job result object with counts and metadata
+        """
+        # Legacy Qiskit execution uses backend.run()
         job = backend.run(circuit, shots=shots)
         result = job.result()
+        
         # Attach compiled circuit to result for downstream metrics
         try:
             setattr(result, 'compiled_circuit', circuit)
         except Exception:
             pass
+        
         return result
     
     def _run_pytket(
@@ -730,6 +879,7 @@ class QuantumSolver(ABC):
         zne_scale_noise: Any = None,
         zne_factory: Any = None,
         pec_representations: Any = None,
+        validation_context: Optional[Any] = None,
     ):
         """Run the transpiled circuit on the specified quantum backend.
         
@@ -761,6 +911,10 @@ class QuantumSolver(ABC):
                 If None, uses Richardson extrapolation with default polynomial degree.
             pec_representations (Any, optional): OperationRepresentation list for PEC.
                 Required if use_pec=True. Maps ideal gates to noisy implementations.
+            validation_context (Optional[ValidationContext]): Validation context for
+                computing Stage 6-7 metrics. If provided, automatically records evaluation
+                and normalization metrics after execution. If None, only execution data
+                (Stage 5) is recorded without metrics computation.
         
         TODO:
             Align external naming with QSudoku.run which uses ``opt_level``.
@@ -785,6 +939,12 @@ class QuantumSolver(ABC):
         # Detect backend SDK type
         sdk_type = self._detect_backend_sdk(backend)
         
+        # Validate SDK consistency: rebuild if main_circuit SDK doesn't match backend SDK
+        if hasattr(self, '_main_circuit_sdk') and self._main_circuit_sdk != sdk_type:
+            # Circuit format mismatch - rebuild in correct SDK format for this backend
+            # Pass sdk explicitly to force rebuild in correct format (bypasses cache)
+            self.build_main_circuit(backend=backend, sdk=sdk_type, force_overwrite=True)
+        
         # Get SDK-aware transpiled circuit path
         path = self.transpiled_circuit_path(backend_alias, optimisation_level, sdk_type=sdk_type)
         
@@ -803,6 +963,15 @@ class QuantumSolver(ABC):
                 compiled_circuit = self._transpile_qiskit(backend, optimisation_level)
             else:
                 raise ValueError(f"Unsupported SDK type for execution: {sdk_type}")
+            
+            # Extract metrics and record to Stage 3 (Compilation)
+            try:
+                res = self._extract_transpiled_metrics(compiled_circuit, sdk_type)
+                res["sdk_type"] = sdk_type
+                self._record_compilation(backend_alias, optimisation_level, res, compiled_circuit, sdk_type)
+            except Exception as e:
+                import logging
+                logging.warning(f"Failed to record compilation metadata in run(): {e}")
             
             # Cache if enabled
             if self.store_transpiled:
@@ -884,10 +1053,33 @@ class QuantumSolver(ABC):
                 return result
         
         # Standard execution (no mitigation)
+        start_time = time.time()
         if sdk_type == "qiskit":
-            return self._run_qiskit_native(backend, compiled_circuit, shots)
+            result = self._run_qiskit_native(backend, compiled_circuit, shots)
         else:  # pytket
-            return self._run_pytket(backend, compiled_circuit, shots)
+            result = self._run_pytket(backend, compiled_circuit, shots)
+        execution_time_ms = (time.time() - start_time) * 1000
+        
+        # Record Stage 5 execution metadata if new architecture is enabled
+        self._record_execution_metadata(
+            backend=backend,
+            backend_alias=backend_alias,
+            result=result,
+            shots=shots,
+            execution_time_ms=execution_time_ms,
+            compiled_circuit=compiled_circuit
+        )
+        
+        # Record Stage 6-7 metrics if validation_context is provided
+        if validation_context:
+            self._record_metrics_if_context(
+                result=result,
+                shots=shots,
+                validation_context=validation_context,
+                compiled_circuit=compiled_circuit
+            )
+        
+        return result
     
     def run_aer(
         self, 
@@ -904,6 +1096,7 @@ class QuantumSolver(ABC):
         max_parallel_experiments: int | None = None,
         blocking_enable: bool = True,
         blocking_qubits: int = 5,
+        validation_context: Optional[Any] = None,
         **backend_options
     ) -> Any:
         """Run the main circuit on Qiskit Aer simulator with full configuration support.
@@ -1002,14 +1195,15 @@ class QuantumSolver(ABC):
             ...     optimization_level=2
             ... )
         """
-        try:
-            from qiskit_aer import AerSimulator
-            from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-        except ImportError as e:
-            raise ImportError(
-                "qiskit-aer is required for Aer simulation. "
-                "Install with: pip install qiskit-aer"
-            ) from e
+        import os
+        import logging
+        from qiskit.compiler import transpile
+
+        # Windows safety default: qiskit-aer native simulator is known to be
+        # unstable in some environments. To prioritize stability, we default to
+        # a pure-Python simulator unless explicitly overridden.
+        force_native_aer = os.environ.get("SUDOKU_NISQ_USE_QISKIT_AER", "0") == "1"
+        use_pure_simulator = (os.name == "nt") and (not force_native_aer)
         
         # Build circuit in Qiskit format (SDK detection will handle this)
         if self.main_circuit is None or not hasattr(self.main_circuit, 'qubits'):
@@ -1028,50 +1222,127 @@ class QuantumSolver(ABC):
         else:
             qc = self.main_circuit
         
-        # Configure AerSimulator with all options
-        aer_options = {
-            "method": method,
-            "device": device,
-            "precision": precision,
-            "blocking_enable": blocking_enable,
-            "blocking_qubits": blocking_qubits,
-        }
-        
-        # Add optional parameters
-        if noise_model is not None:
-            aer_options["noise_model"] = noise_model
-        if coupling_map is not None:
-            aer_options["coupling_map"] = coupling_map
-        if basis_gates is not None:
-            aer_options["basis_gates"] = basis_gates
-        if seed_simulator is not None:
-            aer_options["seed_simulator"] = seed_simulator
-        if max_parallel_threads is not None:
-            aer_options["max_parallel_threads"] = max_parallel_threads
-        if max_parallel_experiments is not None:
-            aer_options["max_parallel_experiments"] = max_parallel_experiments
-        
-        # Merge additional backend options
-        aer_options.update(backend_options)
-        
-        # Create AerSimulator
-        backend = AerSimulator(**aer_options)
-        
-        # Transpile circuit for Aer
-        pm = generate_preset_pass_manager(
-            optimization_level=optimization_level,
-            backend=backend
-        )
-        transpiled_qc = pm.run(qc)
+        if use_pure_simulator:
+            # Pure-Python fallback: BasicSimulator.
+            if noise_model is not None:
+                raise ValueError(
+                    "noise_model is not supported by the Windows-safe simulator fallback. "
+                    "Set SUDOKU_NISQ_USE_QISKIT_AER=1 to force qiskit-aer (may be unstable)."
+                )
+            if method not in ("automatic", "statevector"):
+                logging.warning(
+                    "Windows-safe simulator fallback ignores method=%r; using default execution.",
+                    method,
+                )
+
+            from qiskit.providers.basic_provider import BasicSimulator
+
+            backend = BasicSimulator()
+            transpiled_qc = transpile(
+                qc,
+                backend=backend,
+                optimization_level=optimization_level,
+                seed_transpiler=seed_simulator,
+                num_processes=1,
+            )
+        else:
+            try:
+                from qiskit_aer import AerSimulator
+            except ImportError as e:
+                raise ImportError(
+                    "qiskit-aer is required for Aer simulation. "
+                    "Install with: pip install qiskit-aer"
+                ) from e
+
+            # Configure AerSimulator with all options
+            aer_options = {
+                "method": method,
+                "device": device,
+                "precision": precision,
+                "blocking_enable": blocking_enable,
+                "blocking_qubits": blocking_qubits,
+            }
+
+            # Add optional parameters
+            if noise_model is not None:
+                aer_options["noise_model"] = noise_model
+            if coupling_map is not None:
+                aer_options["coupling_map"] = coupling_map
+            if basis_gates is not None:
+                aer_options["basis_gates"] = basis_gates
+            if seed_simulator is not None:
+                aer_options["seed_simulator"] = seed_simulator
+            if max_parallel_threads is not None:
+                aer_options["max_parallel_threads"] = max_parallel_threads
+            if max_parallel_experiments is not None:
+                aer_options["max_parallel_experiments"] = max_parallel_experiments
+
+            # Merge additional backend options
+            aer_options.update(backend_options)
+
+            backend = AerSimulator(**aer_options)
+            transpiled_qc = transpile(
+                qc,
+                backend=backend,
+                optimization_level=optimization_level,
+                basis_gates=basis_gates,
+                coupling_map=coupling_map,
+                seed_transpiler=seed_simulator,
+            )
         
         # Run simulation
+        start_time = time.time()
         job = backend.run(transpiled_qc, shots=shots)
         result = job.result()
+        execution_time_ms = (time.time() - start_time) * 1000
+
+        # Attach job_id to result when possible (for Stage 5 recording)
+        try:
+            if hasattr(job, "job_id"):
+                job_id_val = job.job_id() if callable(job.job_id) else job.job_id
+                setattr(result, "job_id", job_id_val)
+        except Exception:
+            pass
         # Attach transpiled circuit to result for eta/eta2 computation
         try:
             setattr(result, 'compiled_circuit', transpiled_qc)
         except Exception:
             pass
+        
+        # Record Stage 3/5/6-7 metadata (Aer behaves like other backends)
+        # Stage 6-7 requires a Stage 5 run_id.
+        backend_alias = "aer_simulator"
+        try:
+            backend_name = getattr(backend, "name", None)
+            if callable(backend_name):
+                backend_alias = backend_name()
+            elif isinstance(backend_name, str) and backend_name:
+                backend_alias = backend_name
+        except Exception:
+            pass
+
+        # Note: Stage 3 (Compilation) metadata now recorded via _record_compilation()
+        # Legacy _record_transpilation_metadata() removed
+        self._last_compilation_id = None
+
+        # Stage 5 (Execution)
+        self._record_execution_metadata(
+            backend=backend,
+            backend_alias=backend_alias,
+            result=result,
+            shots=shots,
+            execution_time_ms=execution_time_ms,
+            compiled_circuit=transpiled_qc,
+        )
+
+        # Record Stage 6-7 metrics if validation_context is provided
+        if validation_context:
+            self._record_metrics_if_context(
+                result=result,
+                shots=shots,
+                validation_context=validation_context,
+                compiled_circuit=transpiled_qc
+            )
         
         return result
     
@@ -1267,6 +1538,54 @@ class QuantumSolver(ABC):
         # Override with real validation
         return True
     
+    def _extract_routing_qiskit(self, circuit: Any) -> dict[str, Any] | None:
+        """Extract routing metadata from transpiled Qiskit circuit.
+        
+        Args:
+            circuit: Transpiled Qiskit QuantumCircuit
+            
+        Returns:
+            dict: Routing metadata including layouts and SWAP counts, or None if unavailable
+        """
+        routing = {}
+        
+        # Extract layout information if available
+        if hasattr(circuit, 'layout') and circuit.layout is not None:
+            try:
+                layout_obj = circuit.layout
+                
+                # Extract initial layout (virtual -> physical mapping)
+                if hasattr(layout_obj, 'initial_layout') and layout_obj.initial_layout is not None:
+                    # Convert Layout to dict {qubit_index: physical_qubit}
+                    initial_dict = {}
+                    for virt_qubit, phys_qubit in layout_obj.initial_layout.get_virtual_bits().items():
+                        # virt_qubit is a Qubit object, phys_qubit is an int
+                        if hasattr(virt_qubit, 'index'):
+                            initial_dict[virt_qubit.index] = phys_qubit
+                    if initial_dict:
+                        routing['initial_layout'] = initial_dict
+                
+                # Extract final layout (after routing)
+                if hasattr(layout_obj, 'final_layout') and layout_obj.final_layout is not None:
+                    # Convert Layout to dict {qubit_index: physical_qubit}
+                    final_dict = {}
+                    for virt_qubit, phys_qubit in layout_obj.final_layout.get_virtual_bits().items():
+                        if hasattr(virt_qubit, 'index'):
+                            final_dict[virt_qubit.index] = phys_qubit
+                    if final_dict:
+                        routing['final_layout'] = final_dict
+            except Exception:
+                # Layout extraction can fail for various reasons - gracefully skip
+                pass
+        
+        # Count SWAP gates inserted during routing
+        if hasattr(circuit, 'count_ops'):
+            swap_count = circuit.count_ops().get('swap', 0)
+            if swap_count > 0:
+                routing['swap_count'] = swap_count
+        
+        return routing if routing else None
+    
     def _extract_transpiled_metrics(self, circuit: Any, sdk_type: str) -> dict[str, Any]:
         """Extract resource metrics from a transpiled circuit in SDK-specific format.
         
@@ -1275,7 +1594,7 @@ class QuantumSolver(ABC):
             sdk_type: SDK type of the circuit ("pytket", "qiskit", "braket")
             
         Returns:
-            dict: Resource metrics including n_qubits, n_gates, depth, and SDK-specific data
+            dict: Resource metrics including n_qubits, n_gates, depth, SDK-specific data, and routing
         """
         if sdk_type == "pytket":
             # PyTKET format
@@ -1308,6 +1627,12 @@ class QuantumSolver(ABC):
                         }
                 except Exception:
                     pass  # Skip if not available
+            
+            # Extract routing metadata (layouts and SWAP counts)
+            routing = self._extract_routing_qiskit(circuit)
+            if routing:
+                metrics["routing"] = routing
+            
             return metrics
         elif sdk_type == "braket":
             # Braket format (if we ever support it)
@@ -1316,11 +1641,15 @@ class QuantumSolver(ABC):
             raise ValueError(f"Unknown SDK type: {sdk_type}")
     
     def _save_qiskit_circuit(self, circuit: Any, path: Path) -> None:
-        """Save a Qiskit QuantumCircuit to JSON format.
+        """Save a Qiskit QuantumCircuit to native QPY format.
+        
+        Uses Qiskit's QPY (Qiskit Pulse YAML) binary serialization format to
+        preserve all circuit metadata including pulse schedules, calibrations,
+        and custom instructions. File should have .qpy extension.
         
         Args:
             circuit: Qiskit QuantumCircuit to save
-            path: File path for saving
+            path: File path for saving (should end in .qpy)
         """
         from qiskit import qpy
         
@@ -1338,19 +1667,449 @@ class QuantumSolver(ABC):
             # Don't raise - just skip caching for this circuit
     
     def _load_qiskit_circuit(self, path: Path) -> Any:
-        """Load a Qiskit QuantumCircuit from JSON format.
+        """Load a Qiskit QuantumCircuit from native QPY format.
         
         Args:
-            path: File path to load from
+            path: File path to load from (should be .qpy file)
             
         Returns:
             Qiskit QuantumCircuit
+            
+        Raises:
+            FileNotFoundError: If the circuit file doesn't exist
         """
         from qiskit import qpy
+        
+        if not path.exists():
+            raise FileNotFoundError(f"Circuit cache file not found: {path}")
         
         with path.open("rb") as f:
             circuits = qpy.load(f)
             return circuits[0] if isinstance(circuits, list) else circuits
+
+    def _record_logical_ir(
+        self,
+        circuit: Any,
+        sdk: str,
+        resources: dict[str, Any]
+    ) -> None:
+        """Record circuit to Stage 2a (Logical IR) metadata.
+        
+        Args:
+            circuit: The constructed circuit object
+            sdk: SDK type ("pytket", "qiskit", "braket")
+            resources: Circuit resource dictionary with n_qubits, n_gates, etc.
+        """
+        try:
+            # Skip if new architecture is disabled
+            if not MetadataConfig.ENABLE_NEW_ARCHITECTURE:
+                return
+            
+            # Get puzzle hash for cache directory
+            puzzle_hash = self.puzzle_hash
+            
+            # Initialize Stage 2a manager
+            stage2a = LogicalIRMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=puzzle_hash
+            )
+            
+            # Record circuit
+            stage2a.record(
+                circuit=circuit,
+                sdk=sdk,
+                solver_name=self.solver_name,
+                encoding=self.encoding,
+                resources=resources
+            )
+            
+        except Exception as e:
+            import logging
+            import traceback
+            logging.warning(f"Failed to record logical IR (Stage 2a): {e}")
+            logging.debug(traceback.format_exc())
+    
+    def _record_compilation(
+        self,
+        backend_alias: str,
+        opt_level: int,
+        resources: dict[str, Any],
+        transpiled_circuit: Any | None,
+        sdk_type: str
+    ) -> None:
+        """Record compilation to Stage 3 metadata.
+        
+        Args:
+            backend_alias: Human-readable backend identifier
+            opt_level: Optimization level used
+            resources: Compiled circuit resources dict
+            transpiled_circuit: Transpiled circuit object (or None on error)
+            sdk_type: SDK type used for compilation
+        """
+        try:
+            # Skip if new architecture is disabled
+            if not MetadataConfig.ENABLE_NEW_ARCHITECTURE:
+                return
+            
+            # Get puzzle hash and circuit hash
+            puzzle_hash = self.puzzle_hash
+            
+            # Get circuit hash from Stage 2a if available
+            circuit_hash = None
+            try:
+                stage2a = LogicalIRMetadataManager(
+                    cache_base=self.cache_base,
+                    puzzle_hash=puzzle_hash
+                )
+                records = stage2a.query(
+                    solver_name=self.solver_name,
+                    encoding=self.encoding
+                )
+                if records:
+                    circuit_hash = records[0].get('circuit_hash')
+            except Exception:
+                pass
+            
+            if not circuit_hash:
+                import logging
+                logging.warning("No circuit_hash from Stage 2a; attempting fallback computation")
+                # Try to compute circuit hash directly from main circuit if available
+                if self.main_circuit is not None:
+                    try:
+                        circuit_hash = stage2a._compute_circuit_hash(self.main_circuit, sdk_type)
+                        logging.info(f"Computed fallback circuit_hash: {circuit_hash[:8]}...")
+                    except Exception as e:
+                        logging.warning(f"Could not compute fallback circuit_hash: {e}; skipping Stage 3 recording")
+                        return
+                else:
+                    logging.warning("No main circuit available; skipping Stage 3 recording")
+                    return
+            
+            # Initialize Stage 3 manager
+            stage3 = CompilationMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=puzzle_hash
+            )
+            
+            # Extract routing metadata if available
+            routing_metadata = None
+            if transpiled_circuit and not resources.get('error'):
+                routing_metadata = self._extract_routing_metadata(transpiled_circuit, sdk_type)
+            
+            # Record compilation
+            compilation_id = stage3.record(
+                circuit_hash=circuit_hash,
+                backend_alias=backend_alias,
+                opt_level=opt_level,
+                resources=resources,
+                routing=routing_metadata,
+                sdk_type=sdk_type
+            )
+            
+            # Store compilation_id for later execution recording
+            self._last_compilation_id = compilation_id
+            
+        except Exception as e:
+            import logging
+            logging.debug(f"Failed to record compilation (Stage 3): {e}")
+    
+    def _extract_routing_metadata(
+        self,
+        circuit: Any,
+        sdk_type: str
+    ) -> dict[str, Any] | None:
+        """Extract routing metadata from transpiled circuit.
+        
+        Args:
+            circuit: Transpiled circuit object
+            sdk_type: SDK type ("pytket", "qiskit", "braket")
+            
+        Returns:
+            dict with routing information, or None if unavailable
+        """
+        try:
+            if sdk_type == "qiskit":
+                # Qiskit circuits store layout info in metadata
+                if hasattr(circuit, '_layout'):
+                    layout = circuit._layout
+                    if layout:
+                        return {
+                            'initial_layout': str(layout.initial_layout) if hasattr(layout, 'initial_layout') else None,
+                            'final_layout': str(layout.final_layout) if hasattr(layout, 'final_layout') else None,
+                        }
+            elif sdk_type == "pytket":
+                # PyTKET stores routing info differently
+                # This is a simplified extraction - actual implementation may vary
+                pass
+            
+            return None
+        except Exception:
+            return None
+
+    def _record_ir_policy(self, sdk: str) -> None:
+        """Record IR policy metadata (Stage 2b) after circuit construction.
+        
+        Records solver configuration that affects circuit IR, including:
+        - Solver-specific options (decompose_cnz, track_memory, etc.)
+        - SDK version information
+        - Gate decomposition policies
+        
+        Only records if new architecture is enabled.
+        
+        Args:
+            sdk: SDK used for circuit construction ("pytket", "qiskit", "braket")
+        """
+        try:
+            
+            # Get puzzle hash
+            puzzle_hash = self.puzzle_hash
+            
+            # Initialize Stage 2b manager
+            stage2b = IRPolicyMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=puzzle_hash
+            )
+            
+            # Collect solver options (subclass-specific attributes)
+            solver_options = {}
+            if hasattr(self, 'decompose_cnz'):
+                solver_options['decompose_cnz'] = self.decompose_cnz
+            
+            # Get SDK version
+            sdk_version = self._get_sdk_version(sdk)
+            
+            # Record IR policy
+            stage2b.record(
+                solver_name=self.solver_name,
+                encoding=self.encoding,
+                sdk=sdk,
+                sdk_version=sdk_version,
+                solver_options=solver_options
+            )
+            
+        except Exception as e:
+            # Gracefully handle errors in IR policy recording
+            import logging
+            logging.debug(f"Failed to record IR policy (Stage 2b): {e}")
+    
+    def _get_sdk_version(self, sdk: str) -> str:
+        """Get version string for the specified SDK.
+        
+        Args:
+            sdk: SDK name ("pytket", "qiskit", "braket")
+            
+        Returns:
+            str: SDK version string (e.g., "1.31.1")
+        """
+        try:
+            if sdk == "pytket":
+                import pytket
+                return pytket.__version__
+            elif sdk == "qiskit":
+                import qiskit
+                return qiskit.__version__
+            elif sdk == "braket":
+                import braket
+                return braket.__version__
+            else:
+                return "unknown"
+        except (ImportError, AttributeError):
+            return "unknown"
+
+    def _record_execution_metadata(
+        self,
+        backend: Any,
+        backend_alias: str,
+        result: Any,
+        shots: int,
+        execution_time_ms: float,
+        compiled_circuit: Any
+    ) -> None:
+        """Record execution metadata to Stage 5 if new architecture is enabled.
+        
+        Collects hardware calibration snapshot and execution parameters, then
+        records to ExecutionMetadataManager. Gracefully skips if Stage 5 recording
+        is unavailable or fails.
+        
+        Args:
+            backend: Backend instance that executed the circuit
+            backend_alias: Human-readable backend name
+            result: Execution result object from provider
+            shots: Number of shots executed
+            execution_time_ms: Execution time in milliseconds
+            compiled_circuit: Transpiled circuit that was executed
+        """
+        try:
+            from sudoku_nisq.metadata.config import MetadataConfig
+            
+            # Skip if new architecture is disabled
+            if not MetadataConfig.ENABLE_NEW_ARCHITECTURE:
+                return
+            
+            # Get compilation_id if available (from Stage 3)
+            compilation_id = None
+            if hasattr(self, '_last_compilation_id'):
+                compilation_id = self._last_compilation_id
+            
+            # Skip if no compilation_id (can't link to Stage 3)
+            if not compilation_id:
+                import logging
+                logging.debug(
+                    "Skipping Stage 5 recording: no compilation_id available. "
+                    "Ensure Stage 3 recording is enabled."
+                )
+                return
+            
+            # Get puzzle hash
+            puzzle_hash = self.puzzle_hash
+            
+            # Initialize Stage 5 manager
+            stage5 = ExecutionMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=puzzle_hash
+            )
+            
+            # Extract counts from result
+            counts = {}
+            if hasattr(result, 'get_counts'):
+                counts = result.get_counts()
+            elif hasattr(result, 'quasi_dists'):
+                # SamplerV2 result format
+                quasi_dist = result[0].data.meas.get_counts()
+                counts = quasi_dist
+            
+            # Collect hardware calibration snapshot
+            hardware_snapshot = collect_hardware_metadata(backend)
+            
+            # Extract circuit metrics if available
+            circuit_metrics = None
+            if hasattr(compiled_circuit, 'num_qubits'):
+                circuit_metrics = {
+                    "n_qubits": compiled_circuit.num_qubits,
+                    "depth": compiled_circuit.depth() if hasattr(compiled_circuit, 'depth') else None,
+                }
+                if hasattr(compiled_circuit, 'count_ops'):
+                    circuit_metrics["gate_counts"] = dict(compiled_circuit.count_ops())
+            
+            # Extract job_id if available
+            job_id = None
+            if hasattr(result, 'job_id'):
+                job_id_attr = getattr(result, 'job_id')
+                job_id = job_id_attr() if callable(job_id_attr) else job_id_attr
+            
+            # Record to Stage 5
+            from datetime import datetime, timezone
+
+            backend_name = backend_alias
+            if not backend_name:
+                try:
+                    backend_name_attr = getattr(backend, 'name', None)
+                    if callable(backend_name_attr):
+                        backend_name = backend_name_attr()
+                    elif isinstance(backend_name_attr, str):
+                        backend_name = backend_name_attr
+                except Exception:
+                    backend_name = str(backend)
+
+            run_id = stage5.record(
+                compilation_id=compilation_id,
+                backend_name=backend_name,
+                counts=counts,
+                shots=shots,
+                execution_time_ms=execution_time_ms,
+                hardware_snapshot=hardware_snapshot,
+                job_id=job_id,
+                circuit_metrics=circuit_metrics,
+                timestamp=datetime.now(timezone.utc)
+            )
+            
+            # Store run_id for potential downstream use
+            self._last_run_id = run_id
+            
+        except Exception as e:
+            # Log but don't fail execution on metadata recording errors
+            import logging
+            logging.debug(f"Stage 5 metadata recording failed: {e}")
+    
+    def _record_metrics_if_context(
+        self,
+        result: Any,
+        shots: int,
+        validation_context: Optional[Any],
+        compiled_circuit: Any
+    ) -> None:
+        """Record Stage 6-7 metrics if validation context is provided.
+        
+        Auto-computes evaluation metrics when validation_context contains
+        valid_solutions set. Links to Stage 5 run via run_id.
+        
+        Args:
+            result: Execution result with counts
+            shots: Number of shots executed
+            validation_context: Dict with 'valid_solutions' or ValidationContext object
+            compiled_circuit: Transpiled circuit for resource extraction
+        """
+        try:
+            from sudoku_nisq.metadata.config import MetadataConfig
+            
+            # Skip if new architecture is disabled
+            if not MetadataConfig.ENABLE_NEW_ARCHITECTURE:
+                return
+            
+            # Skip if no run_id from Stage 5
+            run_id = getattr(self, '_last_run_id', None)
+            if not run_id:
+                import logging
+                logging.debug("Skipping Stage 6-7 metrics: no run_id from Stage 5")
+                return
+            
+            # Initialize Stage 6-7 metrics manager
+            stage6_7 = MetricsMetadataManager(
+                cache_base=self.cache_base,
+                puzzle_hash=self.puzzle_hash
+            )
+            
+            # Extract counts from result
+            counts = {}
+            if hasattr(result, 'get_counts'):
+                counts = result.get_counts()
+            elif hasattr(result, 'quasi_dists'):
+                # SamplerV2 result format
+                quasi_dist = result[0].data.meas.get_counts()
+                counts = quasi_dist
+            
+            # Extract circuit resources
+            two_qubit_gates = None
+            circuit_volume = None
+            if hasattr(compiled_circuit, 'num_qubits'):
+                n_qubits = compiled_circuit.num_qubits
+                depth = compiled_circuit.depth() if hasattr(compiled_circuit, 'depth') else None
+                
+                if hasattr(compiled_circuit, 'count_ops'):
+                    gate_counts = compiled_circuit.count_ops()
+                    # Count 2-qubit gates (CX, CZ, etc.)
+                    two_qubit_gates = sum(
+                        count for gate, count in gate_counts.items()
+                        if gate.lower() in ('cx', 'cz', 'cy', 'swap', 'iswap', 'dcx', 'ecr', 'rzz')
+                    )
+                
+                if depth is not None:
+                    circuit_volume = n_qubits * depth
+            
+            # Record metrics
+            stage6_7.record(
+                run_id=run_id,
+                counts=counts,
+                validation_context=validation_context,
+                shots=shots,
+                two_qubit_gates=two_qubit_gates,
+                circuit_volume=circuit_volume
+            )
+            
+        except Exception as e:
+            # Log but don't fail execution
+            import logging
+            logging.debug(f"Stage 6-7 metrics recording failed: {e}")
 
     @staticmethod
     def count_mcx_gates(circuit: Circuit) -> int:

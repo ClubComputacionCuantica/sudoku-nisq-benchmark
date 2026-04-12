@@ -432,4 +432,117 @@ class ExactCoverEncoding:
         
         # Create temporary ExactCoverProblem and delegate
         problem = ExactCoverProblem(universe=universe, subsets=subsets)
-        return problem.to_canonical_encoding()
+        return problem.to_canonical_encoding()    
+    def solution_to_bitstring(
+        self,
+        solution_board: list[list[int]],
+        encoding_type: str = 'simple'
+    ) -> str:
+        """Convert a Sudoku solution board to measurement bitstring.
+        
+        Maps a completed Sudoku board to the bitstring representation that would be
+        measured from a quantum circuit using this encoding. The bitstring corresponds
+        to the selected subsets in the exact cover solution.
+        
+        Args:
+            solution_board: Complete Sudoku board as 2D list of integers (1 to N).
+                Must be a valid solution with all cells filled.
+            encoding_type: Either 'simple' or 'pattern' to specify which encoding
+                to use for conversion. Default 'simple'.
+        
+        Returns:
+            Binary string where '1' at position i means subset S_i is selected.
+            Length equals the number of subsets in the encoding.
+        
+        Raises:
+            ValueError: If encoding_type is invalid, board is incomplete, or solution
+                doesn't match any valid subset selection.
+        
+        Example:
+            >>> from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
+            >>> puzzle = SudokuPuzzle(2, [[1, 0], [0, 1]])
+            >>> encoder = ExactCoverEncoding(puzzle)
+            >>> solution = [[1, 2], [2, 1]]  # Valid completion
+            >>> bitstring = encoder.solution_to_bitstring(solution, 'simple')
+            >>> bitstring
+            '10'  # Indicates which subsets were selected
+        
+        Note:
+            The bitstring is ordered by subset key (S_0, S_1, ..., S_n). For simple
+            encoding, subsets correspond directly to open_tuples order. For pattern
+            encoding, subsets correspond to row patterns.
+        """
+        if encoding_type not in ('simple', 'pattern'):
+            raise ValueError(f"encoding_type must be 'simple' or 'pattern', got {encoding_type}")
+        
+        size = len(solution_board)
+        
+        # Validate board is complete
+        for i in range(size):
+            for j in range(size):
+                if solution_board[i][j] == 0 or solution_board[i][j] is None:
+                    raise ValueError(
+                        f"Solution board is incomplete: cell ({i},{j}) is {solution_board[i][j]}"
+                    )
+        
+        # Get the appropriate subsets for this encoding
+        subsets = self.simple_subsets if encoding_type == 'simple' else self.pattern_subsets
+        n_subsets = len(subsets)
+        
+        # Build bitstring by checking which subsets match the solution
+        bitstring = ['0'] * n_subsets
+        
+        if encoding_type == 'simple':
+            # For simple encoding, check which open_tuples are realized in the solution
+            for idx, (row, col, digit) in enumerate(self.open_tuples):
+                if solution_board[row][col] == digit:
+                    bitstring[idx] = '1'
+        
+        else:  # pattern encoding
+            # For pattern encoding, need to match row patterns
+            # Extract the digit placement pattern from solution for each digit
+            solution_patterns = {}
+            for digit in range(1, size + 1):
+                pattern = []
+                for col in range(size):
+                    # Find which row has this digit in this column
+                    for row in range(size):
+                        if solution_board[row][col] == digit:
+                            pattern.append(row)
+                            break
+                solution_patterns[digit] = pattern
+            
+            # Check each subset pattern against solution patterns
+            subset_idx = 0
+            for digit in range(1, size + 1):
+                # Get patterns for this digit from pattern generation
+                possible_patterns = PatternGeneration(puzzle=type('obj', (), {
+                    'subgrid_size': self.subgrid_size,
+                    'open_tuples': self.open_tuples,
+                    'pre_tuples': self.set_tuples,
+                    'board_size': size,
+                    'board': solution_board
+                })()).patterns
+                
+                if digit in possible_patterns:
+                    for pattern in possible_patterns[digit]:
+                        # Check if this pattern matches the solution
+                        matches = True
+                        for col in range(size):
+                            # Skip cells that are pre-filled
+                            skip = False
+                            for set_row, set_col, set_digit in self.set_tuples:
+                                if set_col == col and set_digit == digit:
+                                    skip = True
+                                    break
+                            
+                            if not skip and pattern[col] != solution_patterns[digit][col]:
+                                matches = False
+                                break
+                        
+                        if matches:
+                            bitstring[subset_idx] = '1'
+                        
+                        subset_idx += 1
+        
+        return ''.join(bitstring)

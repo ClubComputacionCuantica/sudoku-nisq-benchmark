@@ -6,12 +6,19 @@ PyTKET, Qiskit, and Braket backends with SDK-aware caching and metrics.
 """
 
 import pytest
-from unittest.mock import Mock, patch
-from pytket import Circuit
-from pytket.extensions.qiskit import AerBackend
 
-from sudoku_nisq import QSudoku
-from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
+pytest.importorskip("pytket")
+pytest.importorskip("pytket.extensions.qiskit")
+pytest.importorskip("qiskit_aer")
+
+pytestmark = pytest.mark.integration
+
+from unittest.mock import Mock, patch  # noqa: E402
+from pytket import Circuit  # noqa: E402
+from pytket.extensions.qiskit import AerBackend  # noqa: E402
+
+from sudoku_nisq import QSudoku  # noqa: E402
+from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver  # noqa: E402
 
 
 @pytest.fixture
@@ -349,22 +356,30 @@ class TestMetadataTracking:
     
     def test_metadata_stores_sdk_type(self, puzzle_with_solver):
         """Test that metadata stores SDK type for transpiled circuits."""
+        from sudoku_nisq.metadata import CompilationMetadataManager
+        
         backend = AerBackend()
+        
+        # Build circuit first to ensure Stage 2a recording happens
+        puzzle_with_solver.build_circuit()
         
         # Transpile
         puzzle_with_solver._solver.transpile_and_analyze(
             backend, "metadata_test", opt_level=0
         )
         
-        # Check metadata
-        metadata = puzzle_with_solver._metadata.load()
-        solver_data = metadata["solvers"]["ExactCoverQuantumSolver"]
-        encoding_data = solver_data["encodings"]["simple"]
-        backend_data = encoding_data["backends"]["metadata_test"]["0"]
+        # Check metadata via CompilationMetadataManager
+        cache_base = puzzle_with_solver.cache_base
+        puzzle_hash = puzzle_with_solver.puzzle.get_hash()
+        mgr = CompilationMetadataManager(cache_base, puzzle_hash)
         
+        records = mgr.query(backend_alias="metadata_test", opt_level=0)
+        assert len(records) == 1
+        
+        record = records[0]
         # Should include sdk_type
-        assert "sdk_type" in backend_data
-        assert backend_data["sdk_type"] == "pytket"
+        assert "sdk_type" in record
+        assert record["sdk_type"] == "pytket"
     
     def test_metadata_preserves_all_metrics(self, puzzle_with_solver):
         """Test that all metrics are preserved in metadata."""

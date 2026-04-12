@@ -714,11 +714,17 @@ def apply_zne(
     
     # TODO: Make scale_factors and factory configurable
     # Default: fold circuit at scales [1, 3, 5] and use Richardson extrapolation
+    # Only pass scale_noise and factory if explicitly provided (Mitiq requires callables, not None)
+    zne_kwargs = {}
+    if scale_noise is not None:
+        zne_kwargs['scale_noise'] = scale_noise
+    if factory is not None:
+        zne_kwargs['factory'] = factory
+    
     return zne.execute_with_zne(
         mitiq_circuit,
         executor,
-        scale_noise=scale_noise,
-        factory=factory,
+        **zne_kwargs
     )
 
 

@@ -5,7 +5,7 @@ and how to add new providers.
 """
 
 from sudoku_nisq.backends import BackendManager
-from sudoku_nisq.providers.aws_pending import AWSProvider
+from sudoku_nisq.providers.aws import AWSProvider
 
 
 def main():

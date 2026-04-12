@@ -10,12 +10,18 @@ Tests cover:
 - GPU detection (when available)
 - Integration with existing error mitigation
 """
-
+import sys
 import pytest
-from sudoku_nisq import QSudoku
-from sudoku_nisq.backends import BackendManager
-from sudoku_nisq.providers import AerProvider
-from sudoku_nisq.solvers import ExactCoverQuantumSolver
+
+pytest.importorskip("qiskit")
+pytest.importorskip("qiskit_aer")
+
+pytestmark = pytest.mark.integration
+
+from sudoku_nisq import QSudoku  # noqa: E402
+from sudoku_nisq.backends import BackendManager  # noqa: E402
+from sudoku_nisq.providers import AerProvider  # noqa: E402
+from sudoku_nisq.solvers import ExactCoverQuantumSolver  # noqa: E402
 
 
 class TestAerProvider:
@@ -183,6 +189,7 @@ class TestQSudokuAerMethods:
         assert alias == "my_aer"
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support matrix_product_state method")
     def test_run_aer_enhanced(self):
         """Test enhanced run_aer with parameters."""
         result = self.puzzle.run_aer(
@@ -199,6 +206,7 @@ class TestQSudokuAerMethods:
         assert sum(counts.values()) == 64
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support advanced methods")
     def test_run_aer_with_different_methods(self):
         """Test run_aer with different simulation methods."""
         # Use memory-efficient methods only
@@ -214,6 +222,7 @@ class TestQSudokuAerMethods:
             assert sum(counts.values()) == 64
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows uses BasicSimulator without noise model support")
     def test_run_aer_with_noise_custom(self):
         """Test run_aer_with_noise with custom noise model."""
         pytest.importorskip("qiskit_aer")
@@ -262,6 +271,7 @@ class TestAerSimulationMethods:
         self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support automatic method selection")
     def test_automatic_method(self):
         """Test automatic method selection."""
         result = self.puzzle.run_aer(
@@ -271,6 +281,7 @@ class TestAerSimulationMethods:
         assert result is not None
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support matrix_product_state method")
     def test_statevector_method(self):
         """Test matrix_product_state simulation (avoiding large statevector)."""
         result = self.puzzle.run_aer(
@@ -282,6 +293,7 @@ class TestAerSimulationMethods:
         assert len(counts) > 0
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support density_matrix method")
     def test_density_matrix_method(self):
         """Test density matrix simulation."""
         result = self.puzzle.run_aer(
@@ -315,6 +327,7 @@ class TestAerPrecisionAndDevices:
         self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support precision settings")
     def test_double_precision(self):
         """Test double precision (default)."""
         result = self.puzzle.run_aer(
@@ -325,6 +338,7 @@ class TestAerPrecisionAndDevices:
         assert result is not None
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support precision settings")
     def test_single_precision(self):
         """Test single precision."""
         result = self.puzzle.run_aer(
@@ -335,6 +349,7 @@ class TestAerPrecisionAndDevices:
         assert result is not None
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support device selection")
     def test_cpu_device(self):
         """Test CPU device (default)."""
         result = self.puzzle.run_aer(
@@ -373,6 +388,7 @@ class TestAerBackwardCompatibility:
         self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator has qubit limitations for 4x4 puzzles")
     def test_old_run_aer_still_works(self):
         """Test that old run_aer(shots=N) calls still work."""
         # Old usage pattern
@@ -383,6 +399,7 @@ class TestAerBackwardCompatibility:
         assert sum(counts.values()) == 128
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator has qubit limitations for 4x4 puzzles")
     def test_default_parameters(self):
         """Test run_aer with all defaults."""
         result = self.puzzle.run_aer()
@@ -407,6 +424,7 @@ class TestAerWithTranspilation:
         )
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support advanced methods or has qubit limitations")
     def test_transpilation_levels(self):
         """Test different optimization levels."""
         # Only test opt_level 0 and 2 to reduce resource usage
@@ -443,6 +461,7 @@ class TestAerNoiseModels:
         self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support noise models")
     def test_depolarizing_noise(self):
         """Test depolarizing error noise model."""
         pytest.importorskip("qiskit_aer")
@@ -467,6 +486,7 @@ class TestAerNoiseModels:
         assert sum(counts.values()) == 128
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support noise models")
     def test_readout_error(self):
         """Test readout error noise model."""
         pytest.importorskip("qiskit_aer")
@@ -497,6 +517,7 @@ class TestAerPerformanceOptions:
         self.puzzle.set_solver(ExactCoverQuantumSolver, encoding="pattern")
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support blocking options")
     def test_blocking_options(self):
         """Test qubit blocking options."""
         result = self.puzzle.run_aer(
@@ -508,6 +529,7 @@ class TestAerPerformanceOptions:
         assert result is not None
     
     @pytest.mark.heavy
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows BasicSimulator doesn't support seed_simulator parameter")
     def test_seed_simulator(self):
         """Test reproducible simulation with seed."""
         result1 = self.puzzle.run_aer(

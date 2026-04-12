@@ -7,6 +7,8 @@ from typing import List
 from sudoku_nisq.q_sudoku import QSudoku
 from sudoku_nisq.sudoku_puzzle import SudokuPuzzle
 
+pytestmark = pytest.mark.unit
+
 
 class TestQSudoku:
     """Test suite for QSudoku class functionality."""
@@ -61,7 +63,7 @@ class TestQSudoku:
         puzzle = SudokuPuzzle.from_board(sample_4x4_board)
         q_sudoku = QSudoku(puzzle=puzzle)
         
-        assert q_sudoku._metadata.cache_base == Path(".quantum_solver_cache")
+        assert q_sudoku.cache_base == Path(".quantum_solver_cache")
 
     def test_generate_factory_method(self, temp_cache_dir):
         """Test QSudoku.generate() factory method with subgrid_size."""
@@ -157,7 +159,7 @@ class TestQSudoku:
         # Verify solver was created correctly
         mock_solver_class.assert_called_once_with(
             puzzle=q_sudoku_4x4.puzzle,
-            metadata_manager=q_sudoku_4x4._metadata,
+            cache_base=q_sudoku_4x4.cache_base,
             encoding="test_encoding",
             test_param="test_value"
         )
@@ -511,7 +513,7 @@ class TestQSudoku:
         
         mock_solver.run.assert_called_once_with(
             mock_backend, "test_backend", 1000, 
-            force_run=False, optimisation_level=2, test_param="value"
+            force_run=False, optimisation_level=2, validation_context=None, test_param="value"
         )
         assert result == mock_result
 
@@ -530,7 +532,7 @@ class TestQSudoku:
         
         result = q_sudoku_4x4.run_aer(shots=2048, test_param="value")
         
-        mock_solver.run_aer.assert_called_once_with(2048, test_param="value")
+        mock_solver.run_aer.assert_called_once_with(2048, validation_context=None, test_param="value")
         assert result == mock_result
 
     def test_run_aer_default_shots(self, q_sudoku_4x4):
@@ -540,7 +542,7 @@ class TestQSudoku:
         
         q_sudoku_4x4.run_aer()
         
-        mock_solver.run_aer.assert_called_once_with(1024)
+        mock_solver.run_aer.assert_called_once_with(1024, validation_context=None)
 
     def test_run_aer_with_noise_no_solver(self, q_sudoku_4x4):
         """Test run_aer_with_noise without solver raises error."""
@@ -623,22 +625,13 @@ class TestQSudoku:
 
     def test_report_resources(self, q_sudoku_4x4):
         """Test resource reporting."""
+        # Mock the _get_resource_summary_from_stages method
         mock_resource_summary = {"gates": 100, "depth": 50}
         
-        # Mock the entire metadata manager temporarily
-        original_metadata = q_sudoku_4x4._metadata
-        mock_metadata = Mock()
-        mock_metadata.get_resource_summary.return_value = mock_resource_summary
-        q_sudoku_4x4._metadata = mock_metadata
-        
-        try:
+        with patch.object(q_sudoku_4x4, '_get_resource_summary_from_stages', return_value=mock_resource_summary):
             result = q_sudoku_4x4.report_resources()
             
-            mock_metadata.get_resource_summary.assert_called_once()
             assert result == mock_resource_summary
-        finally:
-            # Restore original metadata
-            q_sudoku_4x4._metadata = original_metadata
 
     def test_get_hash(self, q_sudoku_4x4):
         """Test getting puzzle hash."""
@@ -715,7 +708,7 @@ class TestQSudoku:
         assert circuit == mock_circuit
         assert result == mock_result
         mock_solver.build_main_circuit.assert_called_once()
-        mock_solver.run_aer.assert_called_once_with(500)
+        mock_solver.run_aer.assert_called_once_with(500, validation_context=None)
 
     def test_run_with_global_backend_manager(self, q_sudoku_4x4):
         """Test run() method fetches backend from global BackendManager."""

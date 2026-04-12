@@ -108,3 +108,21 @@ class SuccessMetricsCalculator:
             count for bitstring, count in counts.items()
             if validator(bitstring)
         )
+
+
+# Module-level convenience functions for Phase 4 integration
+def calculate_p_succ(counts: Dict[str, int], validator: Callable[[str], bool]) -> float:
+    """Module-level wrapper for success probability calculation.
+    
+    See SuccessMetricsCalculator.calculate_p_succ for documentation.
+    """
+    return SuccessMetricsCalculator.calculate_p_succ(counts, validator)
+
+
+def calculate_distinct_solutions(counts: Dict[str, int], validator: Callable[[str], bool]) -> int:
+    """Module-level wrapper for distinct solutions counting.
+    
+    See SuccessMetricsCalculator.calculate_distinct_solutions for documentation.
+    """
+    return SuccessMetricsCalculator.calculate_distinct_solutions(counts, validator)
+

@@ -9,9 +9,15 @@ Tests the full stack of IBM backend usage without PyTKET wrappers:
 """
 
 import pytest
-from unittest.mock import Mock, patch
-from qiskit import QuantumCircuit
-from qiskit.providers import BackendV2
+
+pytest.importorskip("qiskit")
+pytest.importorskip("qiskit_ibm_runtime")
+
+pytestmark = pytest.mark.integration
+
+from unittest.mock import Mock, patch  # noqa: E402
+from qiskit import QuantumCircuit  # noqa: E402
+from qiskit.providers import BackendV2  # noqa: E402
 
 
 class TestIBMProviderNative:
@@ -42,7 +48,9 @@ class TestIBMProviderNative:
             # Add device should return native backend
             backend = provider.add_device('ibm_brisbane', alias='brisbane')
             
-            assert backend is mock_backend
+            # Verify backend was retrieved correctly
+            mock_service.backend.assert_called_with('ibm_brisbane')
+            assert backend.name == 'ibm_brisbane'
             assert 'qiskit_ibm_runtime' in backend.__module__
     
     def test_provider_authentication_flow(self):
@@ -246,25 +254,46 @@ class TestNativeQiskitExecution:
         mock_backend = Mock(spec=BackendV2)
         mock_backend.__module__ = 'qiskit_ibm_runtime.ibm_backend'
         mock_backend.target = Mock()
+        mock_backend.target.num_qubits = 100  # Mock has enough qubits
+        mock_backend.max_circuits = 10  # Mock max_circuits property
+        
+        # Mock SamplerV2 PrimitiveResult structure
+        mock_pub_result = Mock()
+        mock_pub_result.data = Mock()
+        # Set up attribute that will match one of ['c', 'meas', 'cr']
+        mock_bit_array = Mock()
+        mock_bit_array.get_counts.return_value = {'0000': 1024}
+        mock_pub_result.data.c = mock_bit_array
+        
+        mock_result = Mock()
+        mock_result.__getitem__ = Mock(return_value=mock_pub_result)
         
         mock_job = Mock()
-        mock_result = Mock()
-        mock_result.get_counts.return_value = {'0000': 1024}
         mock_job.result.return_value = mock_result
-        mock_backend.run.return_value = mock_job
+        mock_job.job_id.return_value = 'test_job_id'
+        mock_job.status.return_value = 'DONE'
+        mock_job.metrics.return_value = {
+            'timestamps': {'started': 0, 'finished': 1}
+        }
         
         puzzle = QSudoku.generate(size=2, num_missing_cells=2)
         puzzle.set_solver(ExactCoverQuantumSolver, encoding='simple')
         solver = puzzle._solver
         solver.store_transpiled = False
         
-        # Build and transpile
+        # Build circuit to ensure Stage 2a recording happens
         solver.build_main_circuit(sdk='qiskit')
         
-        with patch.object(solver, '_transpile_qiskit') as mock_transpile:
+        with patch.object(solver, '_transpile_qiskit') as mock_transpile, \
+             patch('qiskit_ibm_runtime.SamplerV2') as mock_sampler_class:
             circuit = QuantumCircuit(2, 2)
             circuit.measure_all()
             mock_transpile.return_value = circuit
+            
+            # Mock Sampler instance and its run method
+            mock_sampler = Mock()
+            mock_sampler.run.return_value = mock_job
+            mock_sampler_class.return_value = mock_sampler
             
             result = solver.run(
                 backend=mock_backend,
@@ -273,9 +302,11 @@ class TestNativeQiskitExecution:
                 optimisation_level=1
             )
             
-            # Should use native execution
-            mock_backend.run.assert_called_once()
-            assert result is mock_result
+            # Should use Sampler primitive execution
+            mock_sampler.run.assert_called_once()
+            # Result is wrapped in NormalizedResult, check that it has get_counts method
+            assert hasattr(result, 'get_counts')
+            assert result.get_counts() == {'0000': 1024}
 
 
 if __name__ == "__main__":

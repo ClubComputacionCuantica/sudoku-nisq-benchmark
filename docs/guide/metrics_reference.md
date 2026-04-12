@@ -1,11 +1,25 @@
 # Benchmarking Metrics Reference Guide
 
-> This module is currently under construction. 
-> APIs and interfaces may change before the stable release.
+> **⚠️ Module Status:**
+> 
+> **✅ IMPLEMENTED (Phase 1 - Foundation):**
+> - Data models (`ExecutionResult`, `HardwareMetadata`, `CompilationMetadata`, `ValidationContext`, `MetricsResult`)
+> - Calculator modules (pure functions): `success_metrics`, `ranking_metrics`, `statistical_metrics`, `efficiency_metrics`, `mass_ranking_metrics`, `odds_metrics`, `peak_metrics`, `retention_metrics`, `shot_budget_metrics`, `cost_metrics`
+> - Unit tests with comprehensive edge case coverage
+> - Dependencies: `scipy` >=1.11.0 for statistical calculations
+> 
+> **🚧 UNDER CONSTRUCTION (Phase 2-6):**
+> - Provider-specific metadata collectors (Qiskit/PyTKET/Braket)
+> - Multi-run aggregation system (`BenchmarkSuite`)
+> - Solver integration (`collect_metrics` parameter in `run()` methods)
+> - Classical baseline comparisons
+> - Export/reporting utilities (JSON, Markdown, LaTeX, plots)
+> 
+> APIs for implemented calculators are stable; collector/aggregator interfaces may change before stable release.
 
 ## Introduction
 
-Modern quantum benchmarking requires a **complete specification** $\mathbf{B}^\star$ that explicitly defines the entire workflow from algorithm to final metrics. This section establishes the theoretical foundation for how sudoku-nisq implements rigorous, reproducible benchmarks following established quantum computing evaluation standards, see e.g. [1]. 
+Modern quantum benchmarking requires a **benchmarking specification** $\mathbf{B}^\star$ that explicitly defines the entire workflow from algorithm to final metrics. This section explores the theoretical foundation for how sudoku-nisq implements reproducible benchmarks. 
 
 The quantum benchmarking process follows a sequence that translates a conceptual task through the quantum computing stack to final performance quantification:
 
@@ -59,7 +73,7 @@ Selection of computational task and instantiation of test problem instances $\ma
 
 **sudoku-nisq implementation**
 
-- `SudokuPuzzle(size=n)` or `ExactCoverProblem(universe, subsets)`
+- `SudokuPuzzle.generate(...)`, `QSudoku.generate(...)`, or `ExactCoverProblem(universe, subsets)`
 - Instance parameters: `puzzle.size`, `puzzle.open_tuples` (search space), `puzzle.pre_tuples` (constraints)
 - Solution space: `ValidationContext.total_valid_count`
 
@@ -72,12 +86,15 @@ Selection of computational task and instantiation of test problem instances $\ma
 from sudoku_nisq import SudokuPuzzle
 
 # Generate instance (non-deterministic, no seed parameter)
-puzzle = SudokuPuzzle.generate(size=4, num_missing_cells=8, canonicalize=True)
-total_solutions = puzzle.count_solutions()  # |Sol(I)|
+puzzle = SudokuPuzzle.generate(subgrid_size=2, num_missing_cells=8, canonicalize=True)
+total_solutions = puzzle.num_solutions  # |Sol(I)|
 
 # Validate bitstring from measurement
-validator = lambda bs: puzzle._solver._is_valid_solution(bs)
-# Note: requires solver to be attached via QSudoku.set_solver()
+valid_solutions = ["..."]
+valid_solutions_set = set(valid_solutions)
+validator = lambda bs: bs in valid_solutions_set
+# Note: in full workflows, you typically attach a solver via QSudoku.set_solver()
+# and use a known list of valid solution bitstrings for small instances.
 ```
 
 **Instance Sampling Distribution ($\mu$)**
@@ -142,7 +159,7 @@ Recorded IR artifacts (deterministic and reproducible):
 
 ---
 
-#### Stage 2b: IR Policy – Allowed Logical Transformation Family ($\mathsf{C}_{\text{IR}}$)
+##### Stage 2b: IR Policy – Allowed Logical Transformation Family ($\mathsf{C}_{\text{IR}}$)
 
 Defines what transformations are allowed during IR construction and before hardware mapping. This is the target-independent part of the compilation pipeline and governs legal implementation variants at the logical level.
 
@@ -153,9 +170,10 @@ These policy elements should be documented in `CompilationMetadata` along with t
 
 **Code example:**
 ```python
-from sudoku_nisq import QSudoku
-qs = QSudoku(puzzle)
-qs.set_solver("exact_cover", encoding="simple", decompose_cnz=True)
+from sudoku_nisq import QSudoku, ExactCoverQuantumSolver
+
+qs = QSudoku.generate(size=4, num_missing_cells=8)
+qs.set_solver(ExactCoverQuantumSolver, encoding="simple", decompose_cnz=True)
 circuit = qs.build_circuit(sdk="qiskit")  # IR in Qiskit format
 print(f"Pre-transpile: {circuit.num_qubits} qubits, depth {circuit.depth()}")
 
@@ -192,14 +210,14 @@ where:
 
 **Metrics connection:**
 - `CompilationMetadata.optimization_level`: Explicit $\theta_{\text{opt}}$ parameter
-- `CompilationMetadata.transpiler_seed`: Ensures reproducibility of $\mathsf{C}$
+- Transpiler seed: not currently supported/recorded (Qiskit transpilation is deterministic given backend + optimization level)
 - `CompilationMetadata.post_transpile_gates`: Gate counts after compilation $G^{\text{post}}(\mathsf{C})$
 - `CompilationMetadata.circuit_hash`: Fingerprint $h(\text{Circuit}^{\text{native}})$ for caching
 
 Compilation metrics are constrained to recorded parameters: optimisation level, transpiler seed, backend target/alias, SDK path, and the post-transpile circuit fingerprint with gate/depth counts. When parameters aren’t set, note provider defaults to keep runs comparable.
 
 Recorded compilation artifacts (deterministic and reproducible):
-- `optimization_level`, `transpiler_seed`
+- `optimization_level`
 - Backend/provider identity (e.g., IBM backend name), target details, coupling map (when available)
 - Provider defaults used
 - Post-transpile native circuit incluing hash
@@ -216,7 +234,7 @@ Abstractly, the allowed implementation family specifies the space of legal trans
 To ensure reproducibility, we treat $\mathsf{C}$ as a **constraint set** that limits compiler freedoms when lowering IR to native circuits. We document the parameters and provenance one can reliably capture:
 
 - optimisation level: record in `CompilationMetadata.optimization_level`.
-- transpiler seed: record in `CompilationMetadata.transpiler_seed` for deterministic runs.
+- transpiler seed: not currently supported/recorded.
 - backend target/alias: record the device or simulator alias, provider, and SDK used.
 - SDK choice and versions: record whether the build used `pytket`, `qiskit`, or `braket`, and capture package versions involved in IR conversion/transpilation.
 - circuit fingerprint: record the post-transpile circuit hash/fingerprint and cache key.
@@ -228,11 +246,9 @@ When parameters aren’t set, note the provider/compiler defaults (e.g., preset 
 **Code example:**
 ```python
 result = qs.run(
-    backend=backend,
     backend_alias="ibm_brisbane",
+    opt_level=2,  # θ_opt
     shots=2048,
-    optimisation_level=2,  # θ_opt
-    transpiler_seed=42      # θ_seed for reproducible 𝖢
 )
 # Post-transpilation metrics available in result.gate_counts
 ```
@@ -332,13 +348,13 @@ where:
 - $\sigma$: scoring functional that evaluates quality relative to $\text{Sol}(I)$ (returns performance score $\in \mathbb{R}_{\geq 0}$)
 
 **sudoku-nisq implementation:**
-- `SuccessMetricsCalculator`: Implements $\alpha$ (counts → probabilities) and $\sigma$ (validation)
+- `calculate_p_succ`, `calculate_distinct_solutions`: Implement $\alpha$ (counts → probabilities) and $\sigma$ (validation)
 - `ValidationContext.solution_validator`: Defines $\text{Sol}(I)$ membership test
 
 **Metrics connection:**
 - `MetricsResult.p_succ`: Primary outcome $\sigma_1 = P(x \in \text{Sol}(I))$
 - `MetricsResult.p_succ_ci_lower`, `p_succ_ci_upper`: Uncertainty quantification via Clopper-Pearson
-- `MetricsResult.snr`: Signal quality $\sigma_2 = \frac{P(\text{valid})}{P(\text{invalid})}$
+- `MetricsResult.valid_odds`: Signal quality (odds ratio) — replaces deprecated "snr"
 - `MetricsResult.distinct_valid_solutions`: Distribution breadth $|\{x: x \in \text{Sol}(I), p(x) > 0\}|$
 
 **Analogy to standard benchmarks:**
@@ -348,11 +364,13 @@ where:
 
 **Code example:**
 ```python
-from sudoku_nisq.metrics.calculators import SuccessMetricsCalculator
+from sudoku_nisq.metrics.calculators import calculate_p_succ, calculate_distinct_solutions
 
-validator = lambda bitstring: puzzle.is_valid_solution(bitstring)
-p_succ = SuccessMetricsCalculator.calculate_p_succ(result.counts, validator)
-distinct = SuccessMetricsCalculator.calculate_distinct_solutions(result.counts, validator)
+valid_solutions = ["..."]
+valid_solutions_set = set(valid_solutions)
+validator = lambda bitstring: bitstring in valid_solutions_set
+p_succ = calculate_p_succ(result.counts, validator)
+distinct = calculate_distinct_solutions(result.counts, validator)
 ```
 
 ---
@@ -377,33 +395,41 @@ Used metrics (See following section):
 - Shot-normalized $\eta_{\text{shot}} = \sigma / N_{\text{shots}}$
 
 **sudoku-nisq implementation:**
-- `EfficiencyMetricsCalculator` : Computes resource-normalized scores
-- See detailed implementation and interpretation in the **Resource-Normalized Efficiency Metrics** section below
+- Deprecated (legacy): `calculate_eta_gate`, `calculate_eta_volume`, `calculate_eta_shot` (linear normalizations)
+- Recommended: retention/log-loss per resource and shot-budget metrics (see below)
 
-**Metrics connection:**
-- `MetricsResult.eta_gate = p_succ / two_qubit_gates`: Comparable to "algorithmic qubits" efficiency
-- `MetricsResult.eta_volume = p_succ / (width × depth)`: Volumetric benchmarking analog
-- `MetricsResult.eta_shot = p_succ / shots`: Cost-efficiency metric
+> **⚠️ DEPRECATED (Dec 2025):** The metrics `eta_gate`, `eta_volume`, `eta_shot` listed below have been replaced with statistically rigorous alternatives. See **Resource-Normalized Efficiency Metrics** section for `retention_per_2q`, `log_loss_per_2q`, and `shots_to_detect` metrics.
+
+**Metrics connection (deprecated):**
+- `MetricsResult.eta_gate = p_succ / two_qubit_gates`: ❌ Replaced by `retention_per_2q` (geometric mean)
+- `MetricsResult.eta_volume = p_succ / (width × depth)`: ❌ Replaced by `retention_per_volume` (geometric mean)
+- `MetricsResult.eta_shot = p_succ / shots`: ❌ Replaced by `shots_to_detect` (reliability-based)
+
+**Why replaced:**
+- Linear normalization p/n assumes additive error model (invalid for multiplicative gate errors)
+- Geometric mean captures true per-resource efficiency in multiplicative settings
+- See migration guide in Resource-Normalized section for detailed comparison
 
 **Alignment with standard benchmarks:**
 - Quantum Volume: Reports $V_Q = 2^{n}$ for largest passing $n$ (single-number FOM)
 - Algorithmic Qubits: Reports $\#AQ(d)$ for depth $d$ achieving target fidelity
 - Our framework: Reports multiple normalizations to avoid imposing artificial composite scores
 
-- $\eta_{\text{gate}}$ – aligns conceptually with Algorithmic Qubits: efficiency relative to two-qubit operations and circuit fidelity thresholds.
-- $\eta_{\text{volume}}$ – aligns with Volumetric Benchmarking (width $w$ × depth $d_c$); note that provider-specific depth definitions and non-square circuits can affect comparability.
-- $\eta_{\text{shot}}$ – reflects statistical cost-efficiency; uncertainty (CI width) scales with shot count.
-
-**Code example:**
+**Code example (deprecated - for backward compatibility only):**
 ```python
-# Manual calculation (automated in future release)
-eta_gate = p_succ / result.two_qubit_gates
-eta_volume = p_succ / (result.num_qubits * result.circuit_depth)
-eta_shot = p_succ / result.shots
+# ⚠️ DEPRECATED: Use new retention/shot_budget metrics instead
+# Manual calculation
+eta_gate = p_succ / result.two_qubit_gates  # ❌ Use retention_per_2q
+eta_volume = p_succ / (result.num_qubits * result.circuit_depth)  # ❌ Use retention_per_volume
+eta_shot = p_succ / result.shots  # ❌ Use shots_to_detect
 
-print(f"η_gate = {eta_gate:.6f}")
-print(f"η_volume = {eta_volume:.6f}")
-print(f"η_shot = {eta_shot:.2e}")
+# Recommended replacement:
+from sudoku_nisq.metrics.calculators import (
+    calculate_retention_per_2q,
+    shots_to_detect
+)
+retention_2q = calculate_retention_per_2q(p_succ, result.two_qubit_gates)
+shots_needed = shots_to_detect(p_succ, reliability=0.95)
 ```
 
 ---
@@ -422,14 +448,14 @@ $$
 | 1 | **Instance sampling** | $\mu$ | Instance sampling distribution | Generation parameters, PRNG seed/version, determinism guarantees |
 | 2a | **IR construction** | $\mathrm{IR}(I)$ | Logical intermediate representation for instance $I$ | Logical circuit object (PyTKET/Qiskit), $G^{\text{pre}}$, $d^{\text{pre}}$, ancilla, SDK versions, IR hash |
 | 2b | **IR policy** | $\mathsf{C}_{IR}$ | IR-level transformation policy | `decompose_cnz`, allowed rewrites, SDK conversion provenance, canonicalization rules |
-| 3 | **Compilation policy** | $\mathsf{C}(\theta)$ | Compilation policy with parameters $\theta$ | `CompilationMetadata`: `optimization_level`, `transpiler_seed`, backend target, implementation family |
+| 3 | **Compilation policy** | $\mathsf{C}(\theta)$ | Compilation policy with parameters $\theta$ | `CompilationMetadata`: `optimization_level`, backend target, implementation family |
 | 3 | **Mapped circuit** | $\text{Circ}^{\text{native}}$ | Hardware-native circuit | Post-transpile gates $G^{\text{post}}$, depth, circuit hash, provider defaults |
 | 4 | **Executable** | $\mathrm{Exec}$ | Executable pulses/schedules | Provider-controlled; `job_id`, backend compiler version (when available) |
 | 5 | **Hardware state** | $\mathcal{H}_t$ | Hardware state at time $t$ | `HardwareMetadata`: calibration timestamp, $T_1$/$T_2$, gate errors at execution time |
 | 5 | **Execution parameters** | $N_{\text{shots}}$ | Measurement shot budget | `ExecutionResult.shots`, timestamp, execution time |
-| 6 | **Preprocessing** | $\alpha$ | Preprocessing map | `SuccessMetricsCalculator`: counts → probabilities, bitstring filtering |
-| 6 | **Scoring functional** | $\sigma$ | Scoring functional | Success metrics: $p_{\text{succ}}$, confidence intervals, SNR, distinct solutions |
-| 7 | **Normalization** | $\tau$ | Normalization rule | Efficiency metrics: $\eta_{\text{gate}}$, $\eta_{\text{volume}}$, $\eta_{\text{shot}}$, ranking metrics |
+| 6 | **Preprocessing** | $\alpha$ | Preprocessing map | `calculate_p_succ`: counts → probabilities, bitstring filtering |
+| 6 | **Scoring functional** | $\sigma$ | Scoring functional | Success metrics: $p_{\text{succ}}$, confidence intervals, valid odds, distinct solutions |
+| 7 | **Normalization** | $\tau$ | Normalization rule | Efficiency metrics: retention/log-loss per resource, shot budgets, ranking metrics |
 
 **Reproducibility requirements:**
 
@@ -465,95 +491,383 @@ Without classical baselines and statistical uncertainty quantification, no rigor
 
 > **Core Framework Feature:** Resource normalization ($\tau$) is central to fair cross-platform benchmarking. Rather than reporting a single composite score, this framework provides multiple normalized figures of merit that reveal different aspects of quantum-classical performance trade-offs.
 
+> **⚠️ Metrics Update (Dec 2025):** The original linear normalization metrics (`eta_gate`, `eta_volume`, `eta_shot`) have been replaced with statistically rigorous alternatives. Original metrics are deprecated and will be removed in v0.5.0. See migration guide below.
+
 The interpretation rule $\tau$ maps raw success scores to resource-normalized metrics, enabling fair comparison across devices with different architectures, compilation strategies, and shot budgets. Each normalization targets a specific resource constraint relevant to practitioners:
 
-### Gate-normalized success: η_gate
+### Retention-based Normalization (Recommended)
 
-Success probability per two-qubit gate.
+#### Log Loss per 2-Qubit Gate
+
+Measures average information loss per entangling gate operation using proper information theory.
 
 $$
-\eta_{\mathrm{gate}} \,=\, \frac{p_{\mathrm{succ}}}{G_{\mathrm{2q}}}
+\text{log\_loss\_per\_2q} = \frac{-\log(p_{\text{succ}})}{G_{2q}}
 $$
 
-where G_2q is the total number of two-qubit gates in the circuit.
+where $G_{2q}$ is the total number of two-qubit gates.
 
-It ties performance directly to a physically meaningful resource (error-prone operations).
-
-- Two-qubit gates are the main contributors to error in NISQ and early post-NISQ systems.
-- Normalizing by G_2q allows comparing circuits with different topologies, mappings, and decompositions.
+**Why this replaces η_gate:**
+- Properly models multiplicative error accumulation (gates compound exponentially)
+- Monotone and well-behaved near $p_{\text{succ}} \to 0$ (unlike linear $p/G$ which is unstable)
+- Information-theoretic interpretation: bits of information lost per gate
+- Smaller values are better (less loss per gate)
 
 **Interpretation:**
-- Higher η_gate: More efficient use of two-qubit gates
-- Enables comparison across different circuit decompositions
-- Accounts for compilation quality (different transpilations have different 2q gate counts)
+- `0.001`: ~0.1% information loss per gate (excellent)
+- `0.01`: ~1% loss per gate (good for NISQ devices)
+- `0.1`: ~10% loss per gate (challenging for longer circuits)
 
-**Alignment:** Conceptually consistent with Algorithmic Qubits metric — efficiency relative to two-qubit operations and circuit fidelity thresholds.
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_log_loss_with_ci
 
-**Note:**  
-`EfficiencyMetricsCalculator` under development. The `ExecutionResult.two_qubit_gates` field is available from `solver.run()` for manual calculation.
+loss, loss_ci = calculate_log_loss_with_ci(p_succ, (ci_lower, ci_upper), two_qubit_gates)
+```
 
 ---
 
-### Volume-normalized success: η_volume
+#### Retention per 2-Qubit Gate
 
-Success probability divided by a circuit complexity proxy consistent with Volumetric Benchmarking (VB).
+Geometric mean success retention per gate operation (intuitive percentage form).
 
 $$
-\eta_{\mathrm{volume}} \,=\, \frac{p_{\mathrm{succ}}}{V}
+\text{retention\_per\_2q} = p_{\text{succ}}^{1/G_{2q}}
 $$
 
-VB frames circuit complexity in terms of **width** and **depth**:
-
-- Width $w$ (or $N_q$): number of qubits used
-- Depth $d_c$: circuit layer count or number of sequential native-gate layers per qubit (provider-specific)
-
-In this project, we define $V$ to align with VB conventions while remaining practical for application circuits:
-
-- Preferred definition: $V = w \times d_c$ (width–depth product), using provider-reported or computed $d_c$.
-- Optional refined definition (when available): $V = \sum \text{(active gates per layer)}$ to capture parallelism; this should be treated as a provider-specific enhancement and clearly documented when used.
-
-This reconciles our earlier intuition (measuring how much quantum work is sustained) with standard VB methodology that emphasizes width and depth.
-
-Note:
-
-- Quantum Volume ($V_Q$): square circuits with $d_c = N_q$; reported as $V_Q = 2^{n_{\mathrm{pass}}}$ for the largest $N_q$ that passes.
-- Algorithmic Qubits ($\#\mathrm{AQ}$): success regions on the $N_q$–$d_c$ plane; some definitions use total CNOT count as a proxy for depth.
+**Why this replaces η_gate:**
+- Equivalent to exponential form of log loss: $\exp(-\text{log\_loss\_per\_2q})$
+- Provides intuitive "percent retained per gate" interpretation
+- Monotone increasing (closer to 1.0 is better)
+- Stable across full range $p \in [0, 1]$
 
 **Interpretation:**
-- Higher η_volume: More efficient success per unit of width–depth complexity
-- Comparable across hardware via `w` and `d_c`; optionally more granular when using per-layer activity
-- Accounts for both circuit depth and qubit count; refined per-layer definition additionally captures gate parallelism
+- `0.999`: 99.9% retention per gate, 0.1% loss (excellent)
+- `0.99`: 99% retention per gate, 1% loss (good)
+- `0.95`: 95% retention per gate, 5% loss (challenging)
 
-**Alignment:** Directly consistent with Volumetric Benchmarking (width $w$ × depth $d_c$); note that provider-specific depth definitions and non-square circuits can affect comparability.
+**Example:**
+```python
+# Algorithm A: p_succ=0.75, gates=60
+retention_A = 0.75 ** (1/60) = 0.9952  # 99.52% per gate
 
-**Note:**
-- `d_c` extraction is provider-dependent and not yet implemented for all SDKs. `ExecutionResult.circuit_depth`/`circuit_volume` may be `None`.
-- When only gate counts are available, prefer reporting η_gate (Section 4.1) and include `w` and approximate `d_c` for context.
+# Algorithm B: p_succ=0.50, gates=40  
+retention_B = 0.50 ** (1/40) = 0.9827  # 98.27% per gate
+
+# Algorithm A has better per-gate fidelity despite lower overall success
+```
+
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_retention_with_ci
+
+retention, retention_ci = calculate_retention_with_ci(p_succ, (ci_lower, ci_upper), two_qubit_gates)
+```
+
+**Confidence Interval Propagation:**
+Both metrics include CI transforms since they're monotone functions of $p_{\text{succ}}$. Retention is increasing (preserves CI order), log loss is decreasing (reverses CI order).
 
 ---
 
-### Shot-normalized success: η_shot
+#### Volume-based Retention Metrics
 
-Success probability per shot.
+Same concepts applied to circuit volume $V = w \times d_c$:
 
 $$
-\eta_{\mathrm{shot}} \,=\, \frac{p_{\mathrm{succ}}}{\text{shots}}
+\text{log\_loss\_per\_volume} = \frac{-\log(p_{\text{succ}})}{V}, \quad \text{retention\_per\_volume} = p_{\text{succ}}^{1/V}
 $$
 
-Connects algorithmic performance with practical usage patterns (latency, throughput).
+**Use when:**
+- Comparing architectures with different gate sets (volume abstracts gate details)
+- Aligning with Volumetric Benchmarking standards
+- Circuit depth and width are key constraints
 
-- Some devices allow more shots cheaply; others penalize them.
-- Shot efficiency measures the marginal gain per sample.
+---
+
+### Shot Budget Metrics (Replaces η_shot)
+
+#### Shots to Detect with 95% Reliability
+
+Answers: "How many shots do I need for 95% confidence of seeing at least one valid solution?"
+
+$$
+N_{\text{detect}} = \left\lceil \frac{\log(1 - r)}{\log(1 - p_{\text{succ}})} \right\rceil
+$$
+
+where $r = 0.95$ is the target reliability.
+
+
+For IID shots with per-shot success probability $p_{\text{succ}}$,
+$$
+\Pr(\text{no successes in }N) = (1-p_{\text{succ}})^N,\quad \Pr(\ge 1\text{ success}) = 1-(1-p_{\text{succ}})^N.
+$$
+Requiring $\Pr(\ge 1\text{ success}) \ge r$ implies $(1-p_{\text{succ}})^N \le 1-r$, which yields the expression above after taking logs.
+
+**Useful approximation:** For small $p_{\text{succ}}$, $\log(1-p_{\text{succ}}) \approx -p_{\text{succ}}$, so
+$$
+N_{\text{detect}} \approx \frac{-\ln(1-r)}{p_{\text{succ}}}.
+$$
+
+**Why this replaces η_shot:**
+- Original `eta_shot = p_succ / shots` had 1/N² scaling artifact (doubling shots halved the metric even with constant success)
+- Shot budgets directly answer practitioner questions: "How many runs do I need?"
+- Inversely proportional to $p_{\text{succ}}$ (intuitive: lower success = more shots needed)
 
 **Interpretation:**
-- Higher η_shot: Better return per measurement
-- Useful for cost-benefit analysis (cloud pricing often per-shot)
-- Helps determine optimal shot allocation
+- `shots_detect_point = 34`: Expect to need 34 shots for 95% confidence
+- `shots_detect_pessimistic = 42`: Conservative estimate (uses CI lower bound)
+- `shots_detect_optimistic = 29`: Optimistic estimate (uses CI upper bound)
+- Range `[29, 42]` is an uncertainty band *induced by the CI on* $p_{\text{succ}}$ (a practical heuristic, not a formal CI on $N_{\text{detect}}$)
 
-**Alignment:** Reflects statistical cost-efficiency; uncertainty (CI width) scales with shot count.
+**Implementation notes:**
+- Handle edge cases explicitly: $p_{\text{succ}}=0 \Rightarrow N_{\text{detect}}=\infty$ (or a sentinel); $p_{\text{succ}}=1 \Rightarrow N_{\text{detect}}=1$
+- Use numerically stable logs: `log1p(-r)` and `log1p(-p_succ)`
 
-**Note:**  
-`EfficiencyMetricsCalculator` under development. Calculate manually from `SuccessMetricsCalculator.calculate_p_succ()` and total shots.
+**Assumption:** Shots are independent and identically distributed (fixed $p_{\text{succ}}$ per shot). Correlations or drift can make $N_{\text{detect}}$ over-optimistic.
+
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_shot_budgets
+
+budgets = calculate_shot_budgets(p_succ, (ci_lower, ci_upper), reliability=0.95)
+# Returns: {
+#   "shots_detect_point": 34,
+#   "shots_detect_pessimistic": 42,
+#   "shots_detect_optimistic": 29,
+#   "reliability": 0.95,
+# }
+```
+
+---
+
+### Cost-Normalized Efficiency Metrics (Heuristic Alternatives)
+
+> **Note:** These metrics provide alternative normalization approaches to the geometric-mean retention metrics. They use different cost models (product, weighted sum, exponential decay) and may suit different analysis needs.
+
+These metrics complement the retention-based approach by offering tunable cost functions that can be adapted to hardware characteristics or fitted from empirical data.
+
+#### Product-Based Normalization (η_×)
+
+**Formula:**
+
+$$
+\eta_{\times} = \frac{p_{\text{succ}}}{\text{depth} \times n_{2q}}
+$$
+
+**Interpretation:**
+- "Success probability per unit of circuit volume (depth × 2Q count)"
+- Higher is better
+- Treats the product as a single "volume" measure
+- Strong penalty for simultaneously large depth and gate count
+
+**When to use:**
+- Comparing circuits with same compilation settings
+- When both dimensions matter equally and you want simplicity
+- Exploratory analysis before fitting a weighted model
+- When depth and 2Q count are uncorrelated in your dataset
+
+**Gotchas:**
+- **Double-counting risk:** Depth and 2Q count are often correlated (more gates → deeper circuit). Multiplying them can over-penalize compared to treating them independently.
+- **Sensitive to scheduling:** Re-scheduling that reduces depth without changing 2Q count can dramatically change this metric.
+- **Not directly actionable:** Doesn't answer "how many shots until success?" (see shot budgets) or "what's the per-gate failure rate?" (see retention metrics).
+
+**Example:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_eta_product
+
+eta_prod = calculate_eta_product(p_succ=0.8, depth=10, two_qubit_gates=5)
+# Returns: 0.016 (0.8 / 50)
+
+# Same p_succ but 4× cost → 1/4 the efficiency
+eta_prod2 = calculate_eta_product(p_succ=0.8, depth=20, two_qubit_gates=10)
+# Returns: 0.004
+```
+
+---
+
+#### Weighted-Sum Normalization (η_+)
+
+**Formula:**
+
+$$
+C = \alpha \cdot \text{depth} + \beta \cdot n_{2q}
+$$
+
+$$
+\eta_{+} = \frac{p_{\text{succ}}}{C}
+$$
+
+**Interpretation:**
+- "Success per unit weighted cost"
+- Higher is better
+- Tunable to hardware/workload characteristics via α, β
+- Avoids over-penalization from product formulation
+
+**Weight selection strategies:**
+
+1. **α=0, β=1:** "Per 2Q gate" (ignores depth entirely) — use when gate errors dominate
+2. **α=1, β=0:** "Per depth" (ignores gates) — use when decoherence dominates
+3. **α=1, β=1:** Simple balanced blend (default)
+4. **Hardware-informed:** α ~ layer decoherence time, β ~ 2Q error rate
+5. **Fitted weights:** Empirical from dataset using `fit_cost_weights()` (most accurate)
+
+**When to use:**
+- When one dimension dominates noise (adjust weights accordingly)
+- Cross-hardware comparisons (refit weights per backend)
+- When product penalty (η_×) seems excessive
+- When you have insight into hardware characteristics
+
+**Example:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_eta_weighted_sum
+
+# Default weights (α=1, β=1)
+eta_wsum = calculate_eta_weighted_sum(p_succ=0.8, depth=10, two_qubit_gates=5)
+# Returns: 0.0533 (0.8 / 15)
+
+# Focus on 2Q gates only (α=0, β=1)
+eta_wsum_gates = calculate_eta_weighted_sum(p_succ=0.8, depth=10, two_qubit_gates=5, 
+                                             alpha=0, beta=1)
+# Returns: 0.16 (0.8 / 5)
+
+# Hardware-informed: depth costs 10× more than each 2Q gate
+eta_wsum_hw = calculate_eta_weighted_sum(p_succ=0.8, depth=10, two_qubit_gates=5,
+                                          alpha=10, beta=1)
+# Returns: 0.00762 (0.8 / 105)
+```
+
+---
+
+#### Decay Rate (k) — Exponential Model
+
+**Formula:**
+
+Assumes exponential decay model:
+
+$$
+p_{\text{succ}} \approx e^{-k \cdot C} \quad \text{where} \quad C = \alpha \cdot \text{depth} + \beta \cdot n_{2q}
+$$
+
+Solve for decay constant:
+
+$$
+k = \frac{-\ln(p_{\text{succ}})}{C}
+$$
+
+**Interpretation:**
+- k is "decay constant" or "penalty per unit cost"
+- **SMALLER is better** (less penalty per resource unit)
+- If k is roughly constant across circuits, your cost model C captures the dominant scaling correctly
+- Connects to physics: exponential fidelity decay with gates/time
+
+**When to use:**
+- Believe failures accumulate exponentially with cost (common in quantum computing)
+- Want model-aligned metric (not just normalized ratio)
+- Checking if cost model (α, β) fits your data
+- Cross-validating against retention metrics (which also use geometric mean)
+
+**Relationship to retention metrics:**
+- `retention_per_2q = p_succ^(1/n_2q)` also captures exponential decay
+- Decay rate generalizes to weighted cost C instead of just n_2q
+- k = -log(p_succ) / C connects directly to exponential decay rate
+
+**Example:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_decay_rate
+
+# High success, moderate cost → small k (good)
+k = calculate_decay_rate(p_succ=0.8, depth=10, two_qubit_gates=5)
+# Returns: 0.01489 (-log(0.8) / 15)
+
+# Low success → larger k (worse)
+k_low = calculate_decay_rate(p_succ=0.1, depth=10, two_qubit_gates=5)
+# Returns: 0.1536 (-log(0.1) / 15)
+```
+
+---
+
+#### Fitting Weights from Data
+
+If you have a diverse dataset of circuits with varying depth and gate counts, you can empirically fit the weights α and β:
+
+```python
+from sudoku_nisq.metrics.calculators import fit_cost_weights
+
+# Collect results: [(p_succ, depth, two_qubit_gates), ...]
+results = [
+    (0.8, 10, 5),
+    (0.5, 20, 10),
+    (0.3, 30, 15),
+]
+
+alpha, beta, r_squared = fit_cost_weights(results)
+print(f"Fitted weights: α={alpha:.4f}, β={beta:.4f}, R²={r_squared:.3f}")
+
+# Use fitted weights in subsequent calculations
+eta_fitted = calculate_eta_weighted_sum(p_succ, depth, gates, alpha=alpha, beta=beta)
+k_fitted = calculate_decay_rate(p_succ, depth, gates, alpha=alpha, beta=beta)
+```
+
+**Interpreting fit results:**
+- **α (depth weight):** Penalty per layer (reflects decoherence exposure)
+- **β (2Q weight):** Penalty per 2Q gate (reflects gate errors)
+- **R² near 1:** Model fits well; cost function captures scaling
+- **R² near 0:** Cost model doesn't explain your data; consider different factors
+
+**Requirements for good fit:**
+- 10+ diverse circuits (vary depth and gates independently)
+- Exponential decay assumption holds
+- Low outlier sensitivity (consider robust regression if needed)
+
+---
+
+#### Comparison Guide: Which Metric to Use?
+
+| **Metric** | **Cost Model** | **Best For** | **Key Trade-off** |
+|------------|----------------|--------------|-------------------|
+| `retention_per_2q` | Geometric mean per gate | Multiplicative per-gate efficiency | Ignores depth; focuses only on gates |
+| `retention_per_volume` | Geometric mean per volume | Multiplicative per-volume efficiency | Assumes uniform cost per volume unit |
+| `eta_product` (η_×) | depth × n_2q | Simple volume penalty | Risk of double-counting correlated dims |
+| `eta_weighted_sum` (η_+) | α·depth + β·n_2q | Tunable blend | Requires weight selection/fitting |
+| `decay_rate` (k) | Log-transformed weighted cost | Exponential decay model | Same as η_+ but log-scaled (physics-aligned) |
+
+**Decision tree:**
+1. **Start with `retention_per_2q`** (geometric mean baseline) → most statistically principled
+2. **Add `eta_weighted_sum`** with default α=β=1 → simple additive cost baseline
+3. **Fit weights** if you have 10+ diverse circuits → hardware-specific optimization
+4. **Compare `decay_rate` with retention** → if trends agree, model is robust
+5. **Use `eta_product`** for quick exploratory analysis when depth/gates uncorrelated
+
+**Important:** These are complementary views, not replacements. Use multiple metrics to triangulate on true efficiency.
+
+---
+
+### Deprecated Metrics (Removal in v0.5.0)
+
+#### ~~η_gate = p_succ / G_2q~~ (DEPRECATED)
+
+**Issues:**
+- Linear normalization doesn't match multiplicative error model
+- Unstable near $p \to 0$ (small changes in $p$ cause large swings)
+- Not monotone for comparisons at different $p$ values
+
+**Replacement:** Use `retention_per_2q` or `log_loss_per_2q` (see above)
+
+---
+
+#### ~~η_volume = p_succ / V~~ (DEPRECATED)
+
+Same issues as η_gate, applied to circuit volume.
+
+**Replacement:** Use `retention_per_volume` or `log_loss_per_volume`
+
+---
+
+#### ~~η_shot = p_succ / shots~~ (DEPRECATED)
+
+**Fatal Issue:** Since $p_{\text{succ}}$ is computed from the same `shots`, the formula creates 1/N² scaling: doubling shots halves the metric even if true success rate is constant. This makes the metric meaningless for cost-efficiency analysis.
+
+**Replacement:** Use `shots_detect_*` metrics (see above)
 
 ---
 
@@ -568,9 +882,9 @@ Fraction of measured bitstrings that correspond to _valid exact covers_ (valid S
 
 **Implementation:**
 ```python
-from sudoku_nisq.metrics.calculators import SuccessMetricsCalculator
+from sudoku_nisq.metrics.calculators import calculate_p_succ
 
-p_succ = SuccessMetricsCalculator.calculate_p_succ(counts, validator)
+p_succ = calculate_p_succ(counts, validator)
 ```
 
 ---
@@ -587,15 +901,17 @@ Coverage allows distinguishing "one good solution found" from "algorithm broadly
 
 **Implementation:**
 ```python
-from sudoku_nisq.metrics.calculators import SuccessMetricsCalculator
+from sudoku_nisq.metrics.calculators import calculate_distinct_solutions
 
-coverage = SuccessMetricsCalculator.calculate_distinct_solutions(counts, validator)
+coverage = calculate_distinct_solutions(counts, validator)
 ```
 
 ---
 
 ## Ranking & Coverage Metrics
+### Count-Based Ranking Metrics (Still Useful)
 
+> **Note:** These metrics count unique bitstrings rather than weighting by probability. See **Mass-Weighted Ranking Metrics** above for sampling-focused alternatives that weight outcomes by frequency.
 ### Top-k valid mass
 
 Probability mass of the $k$ most-probable valid solutions.
@@ -614,8 +930,13 @@ Provides a richer picture than p_succ alone; shows whether correct answers domin
 - **High top-k mass**: Valid solutions concentrated at high probabilities (good amplification)
 - **Low top-k mass**: Valid solutions spread across distribution (poor amplification or high noise)
 
-**Note:**  
-The `RankingMetricsCalculator` class is currently under development. Ranking metrics (top-k mass, precision@k, recall@k) will be available in a future release.
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_top_k_valid_mass
+
+k_values = [1, 3, 5, 10]
+top_k_mass = calculate_top_k_valid_mass(counts, validation_context, k_values)
+```
 
 ---
 
@@ -642,8 +963,92 @@ These metrics are standard in classical ML/search evaluation. They make quantum 
 - **Low precision, high recall**: Many solutions found but mixed with invalid results
 - **Low precision, low recall**: Poor - algorithm not finding or ranking solutions well
 
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import (
+    calculate_precision_at_k,
+    calculate_recall_at_k
+)
+
+# total_valid_count from classical enumeration (e.g., 2 solutions for 2×2)
+prec = calculate_precision_at_k(counts, validation_context, k_values=[1,3,5,10])
+recall = calculate_recall_at_k(counts, validation_context, total_valid_count=2, k_values=[1,3,5,10])
+```
+
 **Note:**  
-Implementation pending. The `total_valid_count` parameter represents the total number of possible valid solutions for the problem, typically obtained from classical enumeration.
+The `total_valid_count` parameter represents the total number of possible valid solutions for the problem, typically obtained from classical enumeration.
+
+---
+
+### Mass-Weighted Ranking Metrics (Improved)
+
+> **⚠️ New Metrics:** Count-based precision/recall metrics treat all bitstrings equally. Mass-weighted variants account for probability, providing more intuitive sampling-based interpretations.
+
+#### Mass Precision@k
+
+Fraction of probability mass that is valid within the top-k outcomes.
+
+$$
+\text{mass\_precision@}k = \frac{\sum_{i=1}^k p(x_i) \cdot \mathbb{1}[x_i \in \text{Sol}(I)]}{\sum_{i=1}^k p(x_i)}
+$$
+
+where top-k is ranked by measurement frequency (descending).
+
+**Interpretation:**
+- Answers: "If I sample from the top-k most frequent outcomes, what fraction of my samples will be valid?"
+- `mass_precision@k = 0.85`: 85% of probability mass in top-k is valid
+- More intuitive than count-based precision for sampling scenarios
+- Not monotone (can increase/decrease with k depending on distribution)
+
+**Example:**
+```python
+# Counts: {"00": 500, "01": 300, "10": 150, "11": 50}, validator: ["00", "10"]
+# k=1: "00" valid, mass=0.5/1.0 = 100%
+# k=2: "00"+"01", valid_mass=0.5, total=0.8, = 62.5%
+# k=3: adds "10" (valid), valid_mass=0.65, total=0.95, = 68.4% (increases!)
+```
+
+---
+
+#### Valid Mass Capture@k
+
+Fraction of all valid probability mass contained in the top-k outcomes.
+
+$$
+\text{capture@}k = \frac{\sum_{i=1}^k p(x_i) \cdot \mathbb{1}[x_i \in \text{Sol}(I)]}{p_{\text{succ}}}
+$$
+
+**Interpretation:**
+- Answers: "How much of the valid probability is concentrated in the top-k list?"
+- `capture@k = 0.92`: Top-k contains 92% of all valid probability
+- Monotone increasing (more coverage as k grows)
+- High capture at small k → valid solutions highly concentrated (good amplification)
+
+**Example:**
+```python
+# Same data, p_succ = 0.65
+# k=1: captures 0.50/0.65 = 76.9% of valid mass
+# k=2: still 76.9% (k=2 adds invalid "01")
+# k=3: captures 0.65/0.65 = 100% (all valid mass in top-3)
+```
+
+**Use Together:**
+- High `mass_precision` + high `capture`: Excellent (clean top-k with complete coverage)
+- Low `mass_precision` + high `capture`: Top-k polluted with invalid but finds all valid
+- High `mass_precision` + low `capture`: Clean top-k but missing valid solutions
+- Low both: Poor algorithm performance
+
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import (
+    calculate_mass_precision_at_k,
+    calculate_valid_mass_capture_at_k
+)
+
+k_values = [1, 3, 5, 10]
+mass_prec = calculate_mass_precision_at_k(counts, validation_context, k_values)
+capture = calculate_valid_mass_capture_at_k(counts, validation_context, k_values)
+```
 
 ---
 
@@ -665,43 +1070,120 @@ Benchmark comparisons must include uncertainty. Without confidence intervals, tw
 - Non-overlapping CIs between devices: Statistically significant difference
 
 **Note:**  
-The `StatisticalMetricsCalculator` class is under development. For now, compute using:
+Clopper–Pearson CIs are implemented via `calculate_clopper_pearson_ci`.
 ```python
+from sudoku_nisq.metrics.calculators.success_metrics import SuccessMetricsCalculator
+from sudoku_nisq.metrics.calculators import calculate_clopper_pearson_ci
+
 valid_shots = SuccessMetricsCalculator.count_valid_shots(counts, validator)
 total_shots = sum(counts.values())
 p_succ = valid_shots / total_shots
 
-# Use scipy.stats.beta or statsmodels for Clopper-Pearson CI
-# CI will be automated in future release
+ci_lower, ci_upper = calculate_clopper_pearson_ci(valid_shots, total_shots, confidence_level=0.95)
 ```
 
 ---
 
-### SNR (signal-to-noise ratio), robust definition
+### Valid Odds (Recommended) and Peak Discrimination
 
-Ratio of total valid probability mass to total invalid probability mass.
+> **⚠️ Metrics Update:** "SNR" has been renamed to "Valid Odds" for statistical honesty. The formula is identical, but the name now correctly reflects what it measures: an odds ratio, not signal-to-noise.
+
+#### Valid Odds
+
+Ratio of valid to invalid probability (odds ratio).
 
 $$
-\mathrm{SNR} \,=\, \frac{\text{total valid mass}}{\text{total invalid mass}} \,=\, \frac{p_{\mathrm{succ}}}{1 - p_{\mathrm{succ}}}
+\text{valid\_odds} = \frac{p_{\text{succ}}}{1 - p_{\text{succ}}}
 $$
 
-SNR is complementary to p_succ:
-
-- Two devices may have the same p_succ but vastly different noise floors.
-- SNR helps diagnose quality of amplitude amplification and underlying coherence.
-
-- SNR captures "how well the device separates solutions from noise."
-- High SNR implies a clear signal; low SNR indicates noise dominates.
+**Why "odds" instead of "SNR":**
+- This is mathematically an odds ratio, a standard statistical concept
+- "Signal-to-noise ratio" implies amplitude or power ratios with specific statistical properties
+- Honest naming prevents confusion with engineering SNR definitions
 
 **Interpretation:**
-- **SNR > 10**: Excellent signal clarity (>90% valid mass)
-- **SNR 1–10**: Good signal with manageable noise (50–90% valid mass)
-- **SNR < 1**: Noise dominates signal (<50% valid mass)
-- **SNR = \(\infty\)**: Perfect (no invalid measurements)
-- **SNR = 0**: No valid measurements
+- **odds < 1**: More invalid than valid outcomes (algorithm struggles)
+- **odds = 1**: Equal valid and invalid probability (50/50)
+- **odds > 10**: Excellent discrimination (>90% valid mass)
+- **odds → ∞**: Perfect discrimination (no invalid measurements)
+- **odds = 0**: No valid measurements
 
-**Note:**  
-`StatisticalMetricsCalculator` under development. Calculate manually as `p_succ / (1 - p_succ)` where `p_succ` is from `SuccessMetricsCalculator.calculate_p_succ()`.
+**Confidence Intervals:**
+Odds CI is derived from $p_{\text{succ}}$ CI using monotone transform. Since odds is increasing in $p$, order is preserved:
+
+$$
+\text{odds\_ci} = \left(\frac{p\_\text{lower}}{1 - p\_\text{lower}}, \frac{p\_\text{upper}}{1 - p\_\text{upper}}\right)
+$$
+
+**JSON Representation:**
+When $p_{\text{succ}} \geq 1$ (perfect success), `valid_odds` is stored as `null` with companion field `valid_odds_is_infinite: true` to maintain JSON compatibility.
+
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_valid_odds_with_ci
+
+odds, odds_ci, is_infinite = calculate_valid_odds_with_ci(p_succ, (ci_lower, ci_upper))
+# Returns: (7.0, (5.77, 8.47), False) for p_succ=0.875
+```
+
+---
+
+#### Peak Discrimination Metrics
+
+While valid odds measures overall probability mass ratio, **peak metrics** reveal distribution shape by comparing the most frequent valid and invalid outcomes.
+
+**Motivation:**
+- Two algorithms can have same `valid_odds` but different concentration
+- Peak metrics detect whether valid solutions truly dominate the frequency ranking
+- Sensitive to amplitude amplification quality
+
+**Metrics:**
+- `p_best_valid`: Probability of most frequent valid solution
+- `p_best_invalid`: Probability of most frequent invalid solution  
+- `peak_ratio = p_best_valid / p_best_invalid`: How much best valid beats best invalid
+- `peak_gap = p_best_valid - p_best_invalid`: Absolute separation
+
+**Interpretation:**
+- `peak_ratio > 1`: Best valid solution more frequent than best invalid (good)
+- `peak_ratio >> 1`: Strong concentration on valid solutions (excellent amplification)
+- `peak_gap > 0.1`: Large separation (clear winner in frequency ranking)
+- `peak_ratio → ∞`: No invalid solutions observed (perfect)
+
+**Example:**
+```python
+# Algorithm A: Concentrated on one valid solution
+# p_best_valid=0.50, p_best_invalid=0.03
+# peak_ratio=16.67, peak_gap=0.47 → Excellent
+
+# Algorithm B: Spread across many valid solutions
+# p_best_valid=0.15, p_best_invalid=0.12
+# peak_ratio=1.25, peak_gap=0.03 → Weak discrimination despite high valid_odds
+```
+
+**Implementation:**
+```python
+from sudoku_nisq.metrics.calculators import calculate_peak_metrics
+
+peak = calculate_peak_metrics(counts, validation_context)
+# Returns: {"p_best_valid": 0.50, "p_best_invalid": 0.03, 
+#           "peak_ratio": 16.67, "peak_gap": 0.47, "peak_ratio_is_infinite": False}
+```
+
+**Use Together:**
+- `valid_odds` tells you overall discrimination (how much total valid mass)
+- `peak_ratio` tells you shape discrimination (is probability concentrated?)
+- High odds + high peak ratio = excellent algorithm performance
+- High odds + low peak ratio = valid solutions spread thin (may need more amplification rounds)
+
+---
+
+### ~~SNR (signal-to-noise ratio)~~ (DEPRECATED — Use Valid Odds)
+
+**Name changed to Valid Odds (see above).** The formula is identical: $p_{\text{succ}} / (1 - p_{\text{succ}})$
+
+**Why deprecated:** "SNR" is a misleading name for what is mathematically an odds ratio. The new name accurately reflects the statistical concept.
+
+**Migration:** Replace `snr` field with `valid_odds` in code and analysis scripts. Deprecated calculator `calculate_snr()` emits a warning and will be removed in v0.5.0.
 
 ---
 

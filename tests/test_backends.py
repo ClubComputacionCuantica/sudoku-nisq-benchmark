@@ -3,7 +3,10 @@ from unittest.mock import MagicMock, patch
 from sudoku_nisq.backends import BackendManager
 
 # Temporarily skipped while BackendManager is under refactor.
-pytestmark = pytest.mark.skip(reason="BackendManager refactor: tests paused")
+pytestmark = [
+    pytest.mark.skip(reason="BackendManager refactor: tests paused"),
+    pytest.mark.integration,
+]
 
 @pytest.fixture(autouse=True)
 def clear_backend_manager():

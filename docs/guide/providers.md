@@ -70,7 +70,9 @@ manager.init_aer(device="statevector", alias="sim")
 # List devices
 ibm_devices = manager.list_available_ibm_devices()
 qtm_devices = manager.list_available_quantinuum_devices()
-aer_methods = manager.list_available_aer_devices()
+# Aer doesn't have a dedicated list_available_aer_devices() helper.
+# Use the unified provider hook instead:
+aer_methods = manager.list_available_devices("aer")
 ```
 
 ### SDK Type Detection

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 class QuantumProvider(ABC):
     """Abstract base class for quantum computing providers."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._configured = False
         self._backends: Dict[str, Any] = {}
     

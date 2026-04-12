@@ -66,7 +66,8 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
     print(f"{'='*70}\n")
     
     # 1. Setup puzzle (2x2 for quick demo)
-    puzzle = QSudoku.generate(size=2, num_missing_cells=2, subgrid_size=1, seed=42)
+    # TODO: Add seed parameter for reproducibility (Phase 5 implementation)
+    puzzle = QSudoku.generate(size=2, num_missing_cells=2, subgrid_size=1)
     puzzle.set_solver(ExactCoverQuantumSolver, encoding='simple')
     
     print("Puzzle configuration:")
@@ -81,7 +82,7 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
     print(f"  Gates: {resources['n_gates']}")
     
     # 3. Get backend
-    manager = BackendManager()
+    manager = BackendManager.inst()
     
     # Special handling for Aer with noise
     if backend_alias == 'aer' and use_noise:
@@ -89,10 +90,15 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
         if noise_model is None:
             print("\nSkipping noisy simulation (qiskit-aer not available)")
             return
+        # Initialize Aer with noise model
+        backend_alias = manager.init_aer(device="statevector", noise_model=noise_model, alias="aer_noisy")
         backend = manager.get(backend_alias)
         # Note: Noise model application happens in run_aer() method
         print(f"\nBackend type: {type(backend).__name__}")
     else:
+        # Initialize Aer backend if needed
+        if backend_alias == 'aer':
+            backend_alias = manager.init_aer(device="statevector", alias="aer")
         backend = manager.get(backend_alias)
         print(f"\nBackend type: {type(backend).__name__}")
     
@@ -115,11 +121,11 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
     print("Running WITHOUT mitigation...")
     print("-"*70)
     
-    if backend_alias == 'aer' and use_noise:
-        result_raw = puzzle.run_aer(
-            shots=shots,
-            noise_model=noise_model if use_noise else None
-        )
+    if 'aer_noisy' in backend_alias:
+        # Backend already has noise model configured
+        result_raw = puzzle.run_aer(shots=shots)
+    elif backend_alias == 'aer':
+        result_raw = puzzle.run_aer(shots=shots)
     else:
         result_raw = puzzle.run(backend_alias, shots=shots)
     
@@ -127,7 +133,10 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
     raw_success_rate = formatted_raw['success_rate']
     
     print(f"Raw success rate: {raw_success_rate:.2%}")
-    print(f"Top solution counts: {formatted_raw['solutions'][0]['count']}")
+    if formatted_raw.get('solutions') and len(formatted_raw['solutions']) > 0:
+        top_sol = formatted_raw['solutions'][0]
+        count = top_sol.get('count', top_sol.get('counts', 'N/A'))
+        print(f"Top solution counts: {count}")
     
     # 6. Run WITH ZNE mitigation
     print("\n" + "-"*70)
@@ -135,7 +144,7 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
     print("-"*70)
     
     try:
-        if backend_alias == 'aer' and use_noise:
+        if 'aer' in backend_alias:
             # For Aer, we need to use the lower-level run() method with use_zne
             # since run_aer doesn't support mitigation parameters yet
             result_zne = puzzle._solver.run(
@@ -164,7 +173,10 @@ def run_comparison_single_backend(backend_alias: str, shots: int = 4096, use_noi
             mitigated_prob = None
         
         print(f"ZNE success rate (from counts): {zne_success_rate:.2%}")
-        print(f"Top solution counts: {formatted_zne['solutions'][0]['count']}")
+        if formatted_zne.get('solutions') and len(formatted_zne['solutions']) > 0:
+            top_sol = formatted_zne['solutions'][0]
+            count = top_sol.get('count', top_sol.get('counts', 'N/A'))
+            print(f"Top solution counts: {count}")
         
         # 7. Compare results
         print("\n" + "="*70)
@@ -221,49 +233,39 @@ def run_multi_backend_comparison():
 def main():
     """Run error mitigation demonstration."""
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║         Error Mitigation Comparison for Sudoku NISQ              ║
-║                                                                  ║
-║  This example demonstrates Zero Noise Extrapolation (ZNE)       ║
-║  with different backend types (native Qiskit and pytket).       ║
-║                                                                  ║
-║  The mitigation executor automatically detects backend SDK      ║
-║  type and handles circuit conversions transparently.            ║
-╚══════════════════════════════════════════════════════════════════╝
+==================================================================
+         Error Mitigation Comparison for Sudoku NISQ
+==================================================================
+  This example demonstrates Zero Noise Extrapolation (ZNE)
+  with different backend types (native Qiskit and pytket).
+
+  The mitigation executor automatically detects backend SDK
+  type and handles circuit conversions transparently.
+==================================================================
     """)
+    
+    print("\n[NOTE] This example requires Mitiq library for error mitigation.")
+    print("If not installed, run: pip install mitiq\n")
     
     # Single backend demo (Aer with noise)
     if NOISE_AVAILABLE:
         print("\nRunning demonstration with noisy Aer simulator...")
-        run_comparison_single_backend('aer', shots=4096, use_noise=True)
+        print("Note: This may take a few minutes due to ZNE overhead.\n")
+        try:
+            run_comparison_single_backend('aer', shots=1024, use_noise=True)
+        except ImportError as e:
+            print(f"\n❌ Missing dependency: {e}")
+            print("Install Mitiq with: pip install mitiq")
+            return
+        except Exception as e:
+            print(f"\n❌ Error during mitigation: {e}")
+            import traceback
+            traceback.print_exc()
+            return
     else:
-        print("\nRunning demonstration with ideal Aer simulator...")
-        print("(Install qiskit-aer for noisy simulation demo)")
-        run_comparison_single_backend('aer', shots=4096, use_noise=False)
-    
-    # Uncomment for full multi-backend comparison
-    # run_multi_backend_comparison()
-    
-    print("\n" + "="*70)
-    print("DEMONSTRATION COMPLETE")
-    print("="*70)
-    print("""
-Key Takeaways:
-  1. Same mitigation code works with Qiskit and pytket backends
-  2. Executor automatically detects backend SDK type
-  3. No manual circuit conversion needed
-  4. ZNE improves success rates on noisy backends
-  5. Access mitigated value via result.mitigated_success_prob
-
-For hardware backends:
-  - Replace 'aer' with 'ibm_brisbane' (IBM) or 'H1-1' (Quantinuum)
-  - Ensure credentials are configured
-  - Increase shots (8192+ recommended)
-  - ZNE effectiveness varies by backend noise characteristics
-  
-Limitations:
-  - AWS Braket is NOT supported (incompatible SDK with Mitiq)
-    """)
+        print("\n⚠️  qiskit-aer not available. Install with: pip install qiskit-aer")
+        print("Skipping noisy simulation demo.")
+        return
 
 
 if __name__ == "__main__":

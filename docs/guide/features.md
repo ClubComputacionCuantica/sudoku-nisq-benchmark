@@ -52,12 +52,13 @@ Gate counts are automatically stored in the circuit metadata and persisted with 
 # Get resource summary including gate counts
 resources = puzzle.report_resources()
 
-solver_data = resources['solvers']['ExactCoverQuantumSolver']
-encoding_data = solver_data['encodings']['simple']
+encoding_data = resources['solvers']['ExactCoverQuantumSolver']['simple']
 
-print(f"Qubits: {encoding_data['main_circuit_resources']['n_qubits']}")
-print(f"Depth: {encoding_data['main_circuit_resources']['depth']}")
-print(f"Gate counts: {encoding_data['gate_counts']}")
+print(f"Qubits: {encoding_data['main_circuit']['n_qubits']}")
+print(f"Depth: {encoding_data['main_circuit']['depth']}")
+
+# Gate counts are available from the solver after circuit construction:
+print(f"Gate counts: {puzzle._solver.get_gate_counts()}")
 ```
 
 ### SDK Consistency

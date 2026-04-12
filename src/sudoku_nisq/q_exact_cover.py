@@ -9,7 +9,6 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 from pathlib import Path
 
 from sudoku_nisq.exact_cover_problem import ExactCoverProblem
-from sudoku_nisq.metadata_manager import MetadataManager
 from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
 
 if TYPE_CHECKING:
@@ -32,7 +31,7 @@ class QExactCover:
     Attributes:
         problem: The ExactCoverProblem instance to solve
         solver: The quantum solver (ExactCoverQuantumSolver)
-        _metadata: MetadataManager for caching circuits
+        cache_base: Base directory for caching circuits
     
     Example:
         >>> # Small example problem
@@ -59,16 +58,13 @@ class QExactCover:
         """
         self.problem = problem
         
-        # Initialize metadata manager
-        self._metadata = MetadataManager(
-            cache_base=Path(cache_base) if cache_base else Path(".quantum_solver_cache"),
-            puzzle_hash=self.problem.get_hash()
-        )
+        # Cache base for stage managers
+        self.cache_base = Path(cache_base) if cache_base else Path(".quantum_solver_cache")
         
         # Initialize solver with the exact cover problem
         self.solver = ExactCoverQuantumSolver(
             exact_cover_problem=problem,
-            metadata_manager=self._metadata,
+            cache_base=self.cache_base,
             encoding="simple"  # Only simple encoding for generic problems
         )
     

@@ -34,7 +34,7 @@ class BackendManager:
             quantinuum_backend = manager.get("quantinuum_device")
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._providers: Dict[str, QuantumProvider] = {}
         self._backend_to_provider: Dict[str, str] = {}
         

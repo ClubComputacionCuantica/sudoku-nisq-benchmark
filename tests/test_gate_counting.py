@@ -1,7 +1,14 @@
 """Test gate counting feature for exact cover circuits."""
 
-from sudoku_nisq.q_sudoku import QSudoku
-from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver
+import pytest
+
+pytest.importorskip("pytket")
+pytest.importorskip("qiskit")
+
+pytestmark = pytest.mark.integration
+
+from sudoku_nisq.q_sudoku import QSudoku  # noqa: E402
+from sudoku_nisq.solvers.exact_cover_solver import ExactCoverQuantumSolver  # noqa: E402
 
 def test_gate_counting_pytket():
     """Test gate counting with PyTKET implementation."""
